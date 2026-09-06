@@ -75,6 +75,21 @@ export default async function handler(req: Request, res: Response) {
     });
   } catch (err: unknown) {
     console.error('[Vercel API /check] Error:', err);
+    const errMsg = err instanceof Error ? err.message : '';
+
+    if (errMsg.includes('Unauthorized') || errMsg.includes('API key')) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired BD Courier API key. Please verify your credentials in Settings.',
+      });
+    }
+    if (errMsg.includes('rate limit')) {
+      return res.status(429).json({
+        success: false,
+        error: 'Upstream courier rate limit reached. Please wait a moment before trying again.',
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: 'Unable to complete the check right now. Please try again in a moment.',

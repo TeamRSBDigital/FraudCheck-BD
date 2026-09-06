@@ -1,18 +1,54 @@
 /**
  * BD Courier API Adapter
- * Secure server-side client to interact with the BD Courier API (api.bdcourier.com).
- * Includes an isolated development sandbox for testing when credentials are not yet supplied.
+ * Secure server-side client to interact with the BD Courier API.
+ * Handles endpoint normalization, automatic fallback, and robust error handling.
  */
 
 import { RawBdCourierResponse } from './types';
 
 export class BdCourierClient {
-  private readonly apiUrl: string;
+  private readonly configuredUrl: string | undefined;
   private readonly apiKey: string | undefined;
 
   constructor() {
-    this.apiUrl = process.env.BDCOURIER_API_URL || 'https://api.bdcourier.com/courier-check';
+    this.configuredUrl = process.env.BDCOURIER_API_URL?.trim();
     this.apiKey = process.env.BDCOURIER_API_KEY?.trim();
+  }
+
+  /**
+   * Resolves possible candidate API endpoints in priority order.
+   * Handles situations where user sets only the domain (e.g. https://api.bdcourier.com)
+   * or full path (e.g. https://api.bdcourier.com/courier-check).
+   */
+  private getCandidateEndpoints(): string[] {
+    const endpoints: string[] = [];
+
+    if (this.configuredUrl) {
+      let trimmed = this.configuredUrl.replace(/\/+$/, '');
+      if (trimmed.includes('/courier-check') || trimmed.includes('/check-courier-info')) {
+        endpoints.push(trimmed);
+      } else if (trimmed.includes('api.bdcourier.com')) {
+        endpoints.push(`${trimmed}/courier-check`);
+      } else if (trimmed.includes('bdcourier.com')) {
+        endpoints.push(`${trimmed}/api/courier-check`);
+      } else {
+        endpoints.push(`${trimmed}/courier-check`);
+      }
+    }
+
+    // Default primary and secondary endpoints
+    const defaults = [
+      'https://api.bdcourier.com/courier-check',
+      'https://bdcourier.com/api/courier-check',
+    ];
+
+    for (const d of defaults) {
+      if (!endpoints.includes(d)) {
+        endpoints.push(d);
+      }
+    }
+
+    return endpoints;
   }
 
   /**
@@ -25,48 +61,92 @@ export class BdCourierClient {
   }> {
     // If API Key is configured, make the live authenticated request
     if (this.apiKey && this.apiKey !== 'demo' && !this.apiKey.startsWith('PLACEHOLDER')) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const endpoints = this.getCandidateEndpoints();
+      let lastError: Error | null = null;
 
-        const response = await fetch(this.apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${this.apiKey}`,
-            'api-key': this.apiKey, // some endpoints use header api-key
-          },
-          body: JSON.stringify({
-            phone: phone,
-            phone_number: phone,
-          }),
-          signal: controller.signal,
-        });
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout for cross-network query
 
-        clearTimeout(timeoutId);
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${this.apiKey}`,
+              'api-key': this.apiKey,
+            },
+            body: JSON.stringify({
+              phone: phone,
+              phone_number: phone,
+            }),
+            signal: controller.signal,
+          });
 
-        if (!response.ok) {
-          // Log server-side warning without leaking tokens
-          console.warn(`[BDCourier] API responded with status ${response.status}`);
-          if (response.status === 404) {
-            return { raw: null, isMock: false };
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            console.warn(`[BDCourier] Endpoint ${endpoint} returned HTTP ${response.status}`);
+
+            if (response.status === 404) {
+              // Valid lookup with no courier records found
+              return { raw: null, isMock: false };
+            }
+
+            if (response.status === 401 || response.status === 403) {
+              throw new Error('Unauthorized: Invalid or expired BD Courier API key. Please check your credentials in Settings.');
+            }
+
+            if (response.status === 429) {
+              throw new Error('Upstream BD Courier rate limit exceeded. Please wait a moment before trying again.');
+            }
+
+            // 405 (Method Not Allowed) means wrong subpath on this candidate; try next endpoint
+            if (response.status === 405) {
+              continue;
+            }
+
+            throw new Error(`Courier provider service returned HTTP ${response.status}`);
           }
-          throw new Error(`Courier provider returned status ${response.status}`);
-        }
 
-        const data = await response.json() as RawBdCourierResponse;
-        return { raw: data, isMock: false };
-      } catch (err: unknown) {
-        const isAbort = err instanceof Error && err.name === 'AbortError';
-        console.error('[BDCourier] Request failed:', isAbort ? 'Timeout after 8s' : 'Network/API error');
-        throw new Error('Unable to connect to courier verification service.');
+          const data = await response.json() as RawBdCourierResponse;
+
+          // Some API endpoints return { status: 'error', message: '...' } with 200 HTTP code
+          if (data && typeof data === 'object' && data.status === 'error' && data.message) {
+            const msg = String(data.message).toLowerCase();
+            if (msg.includes('token') || msg.includes('unauthorized') || msg.includes('api key')) {
+              throw new Error('Unauthorized: Invalid or expired BD Courier API key. Please check your credentials in Settings.');
+            }
+            if (msg.includes('not found') || msg.includes('no data') || msg.includes('no record')) {
+              return { raw: null, isMock: false };
+            }
+          }
+
+          return { raw: data, isMock: false };
+        } catch (err: unknown) {
+          const isAbort = err instanceof Error && err.name === 'AbortError';
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.warn(`[BDCourier] Failed calling ${endpoint}:`, isAbort ? 'Request timed out after 12s' : errMsg);
+          lastError = err instanceof Error ? err : new Error(errMsg);
+
+          // If unauthorized, do not retry other endpoints with the same bad token
+          if (errMsg.includes('Unauthorized')) {
+            throw lastError;
+          }
+        }
+      }
+
+      // If all live endpoints failed, throw the descriptive error
+      if (lastError) {
+        console.error('[BDCourier] All candidate endpoints failed. Last error:', lastError.message);
+        throw lastError;
       }
     }
 
     // Development / Sandbox mode:
     // Explicitly isolated for testing risk engines and UI states when no production API key is configured.
-    console.info(`[BDCourier Sandbox] No BDCOURIER_API_KEY set. Serving deterministic sandbox profile for ${phone.slice(0, 3)}***${phone.slice(-2)}`);
+    console.info(`[BDCourier Sandbox] Serving deterministic profile for ${phone.slice(0, 3)}***${phone.slice(-2)}`);
     const mockData = this.getSandboxProfile(phone);
     return {
       raw: mockData,
@@ -93,8 +173,7 @@ export class BdCourierClient {
       };
     }
 
-    // Profile 2: High Risk (numbers ending in 88, 89, 77, 13 or high odd numbers)
-    // E.g. ~35% success rate, high return rate (12 returned out of 51)
+    // Profile 2: High Risk (numbers ending in 88, 89, 77, 13)
     if (phone.endsWith('88') || phone.endsWith('89') || phone.endsWith('77') || phone.endsWith('13')) {
       return {
         status: 'success',
@@ -142,7 +221,6 @@ export class BdCourierClient {
     }
 
     // Profile 3: Medium Risk (numbers ending in 55, 44, 33, 42)
-    // Moderate history, some returns / cancellation
     if (phone.endsWith('55') || phone.endsWith('44') || phone.endsWith('33') || phone.endsWith('42')) {
       return {
         status: 'success',
@@ -174,7 +252,6 @@ export class BdCourierClient {
     }
 
     // Profile 4: Low Risk / Safe (default profile, high delivery success rate)
-    // E.g. 28 delivered out of 30, only 1 return
     return {
       status: 'success',
       phone,

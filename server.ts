@@ -136,8 +136,24 @@ async function startServer() {
         isMockData: courierResult.isMock,
       });
     } catch (err: unknown) {
-      // Do not expose stack traces or secrets to users
       console.error('[API /check] Error processing courier check:', err);
+      const errMsg = err instanceof Error ? err.message : '';
+
+      if (errMsg.includes('Unauthorized') || errMsg.includes('API key')) {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid or expired BD Courier API key. Please verify your credentials in Settings.',
+        });
+        return;
+      }
+      if (errMsg.includes('rate limit')) {
+        res.status(429).json({
+          success: false,
+          error: 'Upstream courier rate limit reached. Please wait a moment before trying again.',
+        });
+        return;
+      }
+
       res.status(500).json({
         success: false,
         error: 'Unable to complete the check right now. Please try again in a moment.',

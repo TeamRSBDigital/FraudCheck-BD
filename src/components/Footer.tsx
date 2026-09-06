@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Lock, Heart } from 'lucide-react';
+import { Shield, Lock, ExternalLink } from 'lucide-react';
 
 interface FooterProps {
   onOpenLegal: (tab: 'privacy' | 'terms' | 'contact') => void;
@@ -24,8 +24,22 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLegal }) => {
           </p>
         </div>
 
-        {/* Links & Quota Badge */}
-        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8 text-xs font-medium text-slate-600">
+        {/* Links, API Credit & Quota Badge */}
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-xs font-medium text-slate-600">
+          {/* API Credit */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-50 border border-sky-200/80 text-sky-900">
+            <span className="text-slate-500">API Credit:</span>
+            <a
+              href="https://courier.com.bd/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-sky-700 hover:text-sky-900 inline-flex items-center gap-1 hover:underline"
+            >
+              courier.com.bd
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-700">
             <Lock className="w-3 h-3 text-slate-400" />
             <span>50 free checks every day</span>
@@ -56,7 +70,18 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLegal }) => {
 
       <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-2">
         <p>© {new Date().getFullYear()} FraudCheck BD. Built for the Bangladeshi online commerce ecosystem.</p>
-        <p>Not a definitive determination of fraud. Results reflect recorded courier deliveries only.</p>
+        <p>
+          Data & API credit provided by{' '}
+          <a
+            href="https://courier.com.bd/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-slate-600 hover:text-sky-600 underline decoration-slate-300"
+          >
+            courier.com.bd
+          </a>
+          . Results reflect recorded courier deliveries only.
+        </p>
       </div>
     </footer>
   );

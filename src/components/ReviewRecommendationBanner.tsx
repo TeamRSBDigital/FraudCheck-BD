@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ShieldAlert, AlertTriangle, Bookmark, Check, Printer, Sparkles } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, AlertTriangle, Bookmark, Check, Printer, Sparkles, Download } from 'lucide-react';
 import { RiskAssessment } from '../types/index';
 
 interface ReviewRecommendationBannerProps {
   risk: RiskAssessment;
   successRate: number;
   onPrint?: () => void;
+  onExportPdf?: () => void;
+  isExportingPdf?: boolean;
   phone?: string;
 }
 
@@ -13,6 +15,8 @@ export const ReviewRecommendationBanner: React.FC<ReviewRecommendationBannerProp
   risk,
   successRate,
   onPrint,
+  onExportPdf,
+  isExportingPdf = false,
   phone,
 }) => {
   const [isSaved, setIsSaved] = useState(false);
@@ -91,12 +95,31 @@ export const ReviewRecommendationBanner: React.FC<ReviewRecommendationBannerProp
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2.5 self-end md:self-center shrink-0">
+        {onExportPdf && (
+          <button
+            type="button"
+            onClick={onExportPdf}
+            disabled={isExportingPdf}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
+            title="Export as PDF Report"
+            id="banner-export-pdf-btn"
+          >
+            {isExportingPdf ? (
+              <div className="h-3.5 w-3.5 rounded-full border-2 border-slate-400 border-t-slate-900 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+            )}
+            <span>Export as PDF</span>
+          </button>
+        )}
+
         {onPrint && (
           <button
             type="button"
             onClick={onPrint}
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
             title="Print Report"
+            id="banner-print-btn"
           >
             <Printer className="w-3.5 h-3.5 text-slate-500" />
             <span>Print Report</span>

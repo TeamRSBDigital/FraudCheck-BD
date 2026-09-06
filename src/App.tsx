@@ -14,7 +14,8 @@ import { MerchantBenefits } from './components/MerchantBenefits';
 import { LegalModal } from './components/LegalModal';
 import { Footer } from './components/Footer';
 import { PhoneCheckResponse } from './types/index';
-import { RotateCcw, Printer, Info } from 'lucide-react';
+import { RotateCcw, Printer, Info, Download } from 'lucide-react';
+import { exportReportToPdf } from './utils/pdfExport';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -158,8 +159,22 @@ export default function App() {
     handleScrollToChecker();
   };
 
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportPdf = async () => {
+    if (!report) return;
+    setIsExportingPdf(true);
+    try {
+      await exportReportToPdf(report, lastQueriedPhone);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const isRateLimited = remainingChecks !== null && remainingChecks <= 0;
@@ -231,6 +246,8 @@ export default function App() {
                   risk={report.risk}
                   successRate={report.data.successRate}
                   onPrint={handlePrint}
+                  onExportPdf={handleExportPdf}
+                  isExportingPdf={isExportingPdf}
                   phone={report.maskedPhone}
                 />
 
@@ -281,14 +298,30 @@ export default function App() {
                     <span>Check Another Customer</span>
                   </button>
 
-                  <button
-                    onClick={handlePrint}
-                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-medium text-sm text-slate-700 border border-slate-200 shadow-xs hover:bg-slate-50 transition-colors cursor-pointer"
-                    id="print-report-btn"
-                  >
-                    <Printer className="w-4 h-4 text-slate-500" />
-                    <span>Print Report</span>
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      onClick={handleExportPdf}
+                      disabled={isExportingPdf}
+                      className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-medium text-sm text-slate-700 border border-slate-200 shadow-xs hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
+                      id="export-pdf-btn"
+                    >
+                      {isExportingPdf ? (
+                        <div className="h-4 w-4 rounded-full border-2 border-slate-400 border-t-slate-900 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 text-emerald-600" />
+                      )}
+                      <span>{isExportingPdf ? 'Generating PDF...' : 'Export as PDF'}</span>
+                    </button>
+
+                    <button
+                      onClick={handlePrint}
+                      className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-medium text-sm text-slate-700 border border-slate-200 shadow-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                      id="print-report-btn"
+                    >
+                      <Printer className="w-4 h-4 text-slate-500" />
+                      <span>Print Report</span>
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (

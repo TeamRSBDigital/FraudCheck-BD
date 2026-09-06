@@ -1,13 +1,8 @@
 import React from 'react';
-import { ShieldCheck, Truck, AlertTriangle, ArrowRight, CheckCircle2, TrendingUp } from 'lucide-react';
+import { ShieldCheck, Truck, AlertTriangle } from 'lucide-react';
 import { CourierLogo } from './CourierLogos';
 
-interface MerchantBenefitsProps {
-  onSelectSample: (phone: string) => void;
-  disabled?: boolean;
-}
-
-export const MerchantBenefits: React.FC<MerchantBenefitsProps> = ({ onSelectSample, disabled }) => {
+export const MerchantBenefits: React.FC = () => {
   const supportedCouriers = [
     { id: 'steadfast', name: 'SteadFast' },
     { id: 'pathao', name: 'Pathao' },
@@ -17,71 +12,8 @@ export const MerchantBenefits: React.FC<MerchantBenefitsProps> = ({ onSelectSamp
     { id: 'carrybee', name: 'CarryBee' },
   ];
 
-  const sampleScenarios = [
-    {
-      phone: '01711111111',
-      label: 'Verified Buyer',
-      badge: '95% Success',
-      color: 'border-emerald-200 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100/80',
-      dot: 'bg-emerald-500',
-    },
-    {
-      phone: '01922222222',
-      label: 'Average Customer',
-      badge: '65% Success',
-      color: 'border-amber-200 bg-amber-50/80 text-amber-800 hover:bg-amber-100/80',
-      dot: 'bg-amber-500',
-    },
-    {
-      phone: '01833333333',
-      label: 'High Return Risk',
-      badge: '32% Success',
-      color: 'border-rose-200 bg-rose-50/80 text-rose-800 hover:bg-rose-100/80',
-      dot: 'bg-rose-500',
-    },
-  ];
-
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Quick Test Demo Scenarios */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-              Quick Test Demo Numbers (ক্লিক করে টেস্ট করুন)
-            </h3>
-          </div>
-          <span className="text-[11px] text-slate-500">
-            Click any profile to run instant simulation
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          {sampleScenarios.map((sample) => (
-            <button
-              key={sample.phone}
-              type="button"
-              disabled={disabled}
-              onClick={() => onSelectSample(sample.phone)}
-              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all text-left cursor-pointer active:scale-[0.98] ${sample.color} disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${sample.dot}`} />
-                <div>
-                  <div className="font-semibold text-slate-900 font-mono">{sample.phone}</div>
-                  <div className="text-[11px] opacity-80">{sample.label}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 font-semibold text-[11px]">
-                <span>{sample.badge}</span>
-                <ArrowRight className="w-3 h-3 opacity-60" />
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* 3 Core Value Props for E-Commerce Merchants */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-slate-300 transition-all">

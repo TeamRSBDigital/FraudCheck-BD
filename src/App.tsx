@@ -205,10 +205,7 @@ export default function App() {
         )}
 
         {!isLoading && !report && !errorMessage && (
-          <MerchantBenefits
-            onSelectSample={handleCheckCustomer}
-            disabled={isRateLimited}
-          />
+          <MerchantBenefits />
         )}
 
         {/* Result Dashboard */}

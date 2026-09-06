@@ -21,7 +21,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
         </button>
 
         <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-          <div className="h-10 w-10 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600">
+          <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
             <Shield className="h-5 w-5" />
           </div>
           <div>
@@ -52,7 +52,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             </p>
 
             <div className="flex items-center gap-2 font-semibold text-slate-900 pt-2">
-              <HeartHandshake className="w-4 h-4 text-sky-600" />
+              <HeartHandshake className="w-4 h-4 text-blue-600" />
               <span>Dedicated to Merchant Sustainability</span>
             </div>
             <p>

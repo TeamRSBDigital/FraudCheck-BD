@@ -6,13 +6,19 @@
 
 import { RawBdCourierResponse } from './types';
 
+export interface CourierHistoryResult {
+  raw: RawBdCourierResponse | null;
+  isMock: boolean;
+  notice?: string;
+}
+
 export class BdCourierClient {
   private readonly configuredUrl: string | undefined;
   private readonly apiKey: string | undefined;
 
   constructor() {
     this.configuredUrl = process.env.BDCOURIER_API_URL?.trim();
-    this.apiKey = process.env.BDCOURIER_API_KEY?.trim();
+    this.apiKey = process.env.BDCOURIER_API_KEY ? process.env.BDCOURIER_API_KEY.replace(/^["']|["']$/g, '').trim() : undefined;
   }
 
   /**
@@ -40,6 +46,7 @@ export class BdCourierClient {
     const defaults = [
       'https://api.bdcourier.com/courier-check',
       'https://bdcourier.com/api/courier-check',
+      'https://courier.com.bd/api/courier-check',
     ];
 
     for (const d of defaults) {
@@ -55,10 +62,7 @@ export class BdCourierClient {
    * Fetches courier delivery records for the given normalized phone number.
    * Ensures zero credential leakage to client.
    */
-  async getCourierHistory(phone: string): Promise<{
-    raw: RawBdCourierResponse | null;
-    isMock: boolean;
-  }> {
+  async getCourierHistory(phone: string): Promise<CourierHistoryResult> {
     // If API Key is configured, make the live authenticated request
     if (this.apiKey && this.apiKey !== 'demo' && !this.apiKey.startsWith('PLACEHOLDER')) {
       const endpoints = this.getCandidateEndpoints();
@@ -76,10 +80,12 @@ export class BdCourierClient {
               'Accept': 'application/json',
               'Authorization': `Bearer ${this.apiKey}`,
               'api-key': this.apiKey,
+              'X-API-Key': this.apiKey,
             },
             body: JSON.stringify({
               phone: phone,
               phone_number: phone,
+              api_key: this.apiKey,
             }),
             signal: controller.signal,
           });
@@ -87,7 +93,17 @@ export class BdCourierClient {
           clearTimeout(timeoutId);
 
           if (!response.ok) {
-            console.warn(`[BDCourier] Endpoint ${endpoint} returned HTTP ${response.status}`);
+            let responseMessage = '';
+            try {
+              const errBody = (await response.json()) as { message?: string; error?: string; status?: string };
+              if (errBody && typeof errBody === 'object') {
+                responseMessage = errBody.message || errBody.error || '';
+              }
+            } catch {
+              // Non-JSON response
+            }
+
+            console.warn(`[BDCourier] Endpoint ${endpoint} returned HTTP ${response.status}: ${responseMessage}`);
 
             if (response.status === 404) {
               // Valid lookup with no courier records found
@@ -95,7 +111,17 @@ export class BdCourierClient {
             }
 
             if (response.status === 401 || response.status === 403) {
-              throw new Error('Unauthorized: Invalid or expired BD Courier API key. Please check your credentials in Settings.');
+              // BD Courier returns 403 when subscription plan is not active or token lacks subscription
+              const noticeText = responseMessage
+                ? `BD Courier Notice: ${responseMessage}`
+                : 'BD Courier API key has no active subscription or was not recognized. Showing simulated test profile.';
+
+              console.warn('[BDCourier API Subscription Notice]:', noticeText);
+              return {
+                raw: this.getSandboxProfile(phone),
+                isMock: true,
+                notice: noticeText,
+              };
             }
 
             if (response.status === 429) {
@@ -110,13 +136,17 @@ export class BdCourierClient {
             throw new Error(`Courier provider service returned HTTP ${response.status}`);
           }
 
-          const data = await response.json() as RawBdCourierResponse;
+          const data = (await response.json()) as RawBdCourierResponse;
 
           // Some API endpoints return { status: 'error', message: '...' } with 200 HTTP code
           if (data && typeof data === 'object' && data.status === 'error' && data.message) {
             const msg = String(data.message).toLowerCase();
-            if (msg.includes('token') || msg.includes('unauthorized') || msg.includes('api key')) {
-              throw new Error('Unauthorized: Invalid or expired BD Courier API key. Please check your credentials in Settings.');
+            if (msg.includes('token') || msg.includes('unauthorized') || msg.includes('api key') || msg.includes('subscription')) {
+              return {
+                raw: this.getSandboxProfile(phone),
+                isMock: true,
+                notice: `BD Courier Notice: ${data.message}`,
+              };
             }
             if (msg.includes('not found') || msg.includes('no data') || msg.includes('no record')) {
               return { raw: null, isMock: false };
@@ -129,18 +159,17 @@ export class BdCourierClient {
           const errMsg = err instanceof Error ? err.message : String(err);
           console.warn(`[BDCourier] Failed calling ${endpoint}:`, isAbort ? 'Request timed out after 12s' : errMsg);
           lastError = err instanceof Error ? err : new Error(errMsg);
-
-          // If unauthorized, do not retry other endpoints with the same bad token
-          if (errMsg.includes('Unauthorized')) {
-            throw lastError;
-          }
         }
       }
 
-      // If all live endpoints failed, throw the descriptive error
+      // If all live endpoints failed with network/timeout errors, gracefully fallback to sandbox
       if (lastError) {
-        console.error('[BDCourier] All candidate endpoints failed. Last error:', lastError.message);
-        throw lastError;
+        console.warn('[BDCourier] Live endpoints unreachable. Falling back to sandbox profile:', lastError.message);
+        return {
+          raw: this.getSandboxProfile(phone),
+          isMock: true,
+          notice: 'Live courier API unreachable. Showing simulated demonstration profile.',
+        };
       }
     }
 
@@ -158,7 +187,7 @@ export class BdCourierClient {
    * Deterministic sandbox data generator based on phone number patterns.
    * Useful for testing all 4 primary UI states: Low Risk, Medium Risk, High Risk, No Data.
    */
-  private getSandboxProfile(phone: string): RawBdCourierResponse | null {
+  public getSandboxProfile(phone: string): RawBdCourierResponse | null {
     // Profile 1: No Data (numbers ending in 00, 99, or containing all zeroes)
     if (phone.endsWith('00') || phone.endsWith('99') || phone === '01700000000') {
       return {
@@ -170,6 +199,69 @@ export class BdCourierClient {
         returned_parcel: 0,
         success_ratio: 0,
         data: {},
+      };
+    }
+
+    // Profile for 01811111111 or numbers ending in 11 (Moderate Risk: 46 orders, 28 success, 18 cancelled / 60.9%)
+    if (phone === '01811111111' || phone.endsWith('11')) {
+      return {
+        status: 'success',
+        phone,
+        total_parcel: 46,
+        success_parcel: 28,
+        cancelled_parcel: 18,
+        returned_parcel: 18,
+        success_ratio: 60.9,
+        data: {
+          pathao: {
+            name: 'Pathao',
+            total_parcel: 18,
+            success_parcel: 10,
+            returned_parcel: 8,
+            cancelled_parcel: 8,
+            success_ratio: 55.6,
+          },
+          steadfast: {
+            name: 'SteadFast',
+            total_parcel: 3,
+            success_parcel: 0,
+            returned_parcel: 3,
+            cancelled_parcel: 3,
+            success_ratio: 0.0,
+          },
+          courierfast: {
+            name: 'Courier Fast',
+            total_parcel: 0,
+            success_parcel: 0,
+            returned_parcel: 0,
+            cancelled_parcel: 0,
+            success_ratio: 0.0,
+          },
+          redx: {
+            name: 'RedX',
+            total_parcel: 16,
+            success_parcel: 10,
+            returned_parcel: 6,
+            cancelled_parcel: 6,
+            success_ratio: 62.5,
+          },
+          paperfly: {
+            name: 'Paperfly',
+            total_parcel: 9,
+            success_parcel: 8,
+            returned_parcel: 1,
+            cancelled_parcel: 1,
+            success_ratio: 88.9,
+          },
+          carrybee: {
+            name: 'CarryBee',
+            total_parcel: 0,
+            success_parcel: 0,
+            returned_parcel: 0,
+            cancelled_parcel: 0,
+            success_ratio: 0.0,
+          },
+        },
       };
     }
 

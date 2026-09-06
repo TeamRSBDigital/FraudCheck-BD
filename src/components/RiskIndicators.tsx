@@ -42,7 +42,7 @@ export const RiskIndicators: React.FC<RiskIndicatorsProps> = ({ indicators }) =>
     <div className="rounded-xl bg-white p-5 sm:p-6 border border-slate-200/90 shadow-sm space-y-3">
       <div className="flex items-center justify-between pb-3 border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-sky-600" />
+          <Shield className="w-4 h-4 text-blue-600" />
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 font-display">
             Delivery Risk Indicators
           </h3>

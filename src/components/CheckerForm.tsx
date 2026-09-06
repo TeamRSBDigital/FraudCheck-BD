@@ -1,91 +1,99 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, AlertCircle, X, CheckCircle2 } from 'lucide-react';
-import { isValidBdPhone, normalizeBdPhone, sanitizePhoneInput, isCompleteBdPhone } from '../../lib/phone';
+import React, { useState, useEffect } from 'react';
+import { Search, X, AlertCircle, ShieldCheck, PhoneCall } from 'lucide-react';
+import { normalizeBdPhone, sanitizePhoneInput, isValidBdPhone } from '../../lib/phone';
 
 interface CheckerFormProps {
-  onSubmit: (phone: string) => void;
+  onCheck?: (phone: string) => void;
+  onSubmit?: (phone: string) => void;
   isLoading: boolean;
-  disabled: boolean;
+  disabled?: boolean;
+  initialValue?: string;
 }
 
 export const CheckerForm: React.FC<CheckerFormProps> = ({
+  onCheck,
   onSubmit,
   isLoading,
-  disabled,
+  disabled = false,
+  initialValue = '',
 }) => {
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState<string>(initialValue);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isTouched, setIsTouched] = useState(false);
-  const lastAutoCheckedRef = useRef<string>('');
 
-  const processInput = (rawVal: string) => {
-    setIsTouched(true);
-    // Automatically strip non-numeric characters (convert Bengali/Arabic numerals) and strictly cap at 11 digits
-    const sanitized = sanitizePhoneInput(rawVal);
-    setPhoneNumber(sanitized);
+  const triggerCheck = (phone: string) => {
+    if (onCheck) onCheck(phone);
+    else if (onSubmit) onSubmit(phone);
+  };
 
-    // Immediately trigger the 'Check Customer' action once exactly 11 digits are entered
-    if (sanitized.length === 11) {
-      if (isValidBdPhone(sanitized)) {
-        setErrorMessage(null);
-        // Seamlessly auto-submit
-        if (sanitized !== lastAutoCheckedRef.current && !isLoading) {
-          lastAutoCheckedRef.current = sanitized;
-          onSubmit(sanitized);
-        }
+  useEffect(() => {
+    if (initialValue) {
+      setPhoneNumber(normalizeBdPhone(initialValue));
+    }
+  }, [initialValue]);
+
+  // Handle phone input changes with immediate normalization
+  const processInput = (raw: string) => {
+    const cleaned = sanitizePhoneInput(raw);
+
+    // Limit to max 11 digits
+    const truncated = cleaned.slice(0, 11);
+    setPhoneNumber(truncated);
+
+    // Validate as user types
+    if (truncated.length > 0) {
+      if (!truncated.startsWith('01')) {
+        setErrorMessage('Phone number must start with 01');
+      } else if (
+        truncated.length >= 3 &&
+        !['013', '014', '015', '016', '017', '018', '019'].includes(
+          truncated.substring(0, 3)
+        )
+      ) {
+        setErrorMessage('Invalid operator prefix (use 013-019)');
+      } else if (truncated.length === 11 && !isValidBdPhone(truncated)) {
+        setErrorMessage('Invalid 11-digit Bangladeshi mobile number');
       } else {
-        setErrorMessage('Enter a valid Bangladeshi mobile number starting with 013 - 019.');
+        setErrorMessage(null);
       }
     } else {
-      // Invalidate cache so user can re-trigger if they delete or modify digits
-      lastAutoCheckedRef.current = '';
-      if (sanitized.length < 11) {
-        setErrorMessage(null);
-      }
+      setErrorMessage(null);
+    }
+
+    // Auto-check when reaching 11 valid digits
+    if (truncated.length === 11 && isValidBdPhone(truncated) && !isLoading) {
+      setErrorMessage(null);
+      triggerCheck(truncated);
     }
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text');
-    const target = e.currentTarget;
-    const start = target.selectionStart ?? 0;
-    const end = target.selectionEnd ?? phoneNumber.length;
-    // Combine current value with pasted text, removing non-numeric chars
-    const combined = phoneNumber.slice(0, start) + pasted + phoneNumber.slice(end);
-    processInput(combined);
+    processInput(pasted);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!phoneNumber) {
+      setErrorMessage('Please enter an 11-digit mobile number');
+      return;
+    }
+
+    if (!isValidBdPhone(phoneNumber)) {
+      setErrorMessage('Please enter a valid 11-digit Bangladeshi number (e.g. 01xxxxxxxxx)');
+      return;
+    }
+
+    setErrorMessage(null);
+    triggerCheck(phoneNumber);
   };
 
   const handleClear = () => {
     setPhoneNumber('');
     setErrorMessage(null);
-    lastAutoCheckedRef.current = '';
-    setIsTouched(false);
-  };
-
-  const handleSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setIsTouched(true);
-
-    const cleaned = sanitizePhoneInput(phoneNumber);
-
-    if (!cleaned) {
-      setErrorMessage('Please enter a Bangladeshi mobile number.');
-      return;
-    }
-
-    if (cleaned.length !== 11 || !isValidBdPhone(cleaned)) {
-      setErrorMessage('Enter a valid 11-digit Bangladeshi mobile number (013 - 019).');
-      return;
-    }
-
-    setErrorMessage(null);
-    lastAutoCheckedRef.current = cleaned;
-    onSubmit(cleaned);
-  };
-
-  const handleQuickSelect = (samplePhone: string) => {
-    processInput(samplePhone);
+    const input = document.getElementById('phone-input');
+    input?.focus();
   };
 
   const isComplete = phoneNumber.length === 11 && isValidBdPhone(phoneNumber);
@@ -93,160 +101,131 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
   return (
     <div
       id="checker-card"
-      className="relative rounded-2xl bg-white p-6 sm:p-8 shadow-sm border border-slate-200/90 max-w-2xl mx-auto transition-all"
+      className="relative rounded-2xl bg-white shadow-sm border border-slate-200/90 overflow-hidden transition-all"
     >
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-950 font-display">
-          Check Customer
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Enter an 11-digit mobile number to view courier delivery records.
-        </p>
+      {/* SaaS Header Banner with High-Contrast Navy/Slate Theme */}
+      <div className="bg-slate-900 px-6 py-5 text-white border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-slate-800/90 border border-slate-700/80 text-[11px] font-medium text-slate-300 mb-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Bangladesh Courier Fraud Intelligence</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight font-display text-white">
+              Customer Courier Risk Check
+            </h2>
+            <p className="mt-0.5 text-xs sm:text-sm text-slate-300 font-medium">
+              পার্সেল পাঠানোর পূর্বে কাস্টমারের ডেলিভারি হিস্ট্রি ও রিস্ক লেভেল যাচাই করুন
+            </p>
+          </div>
+          <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-700/60 self-start sm:self-center">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Multi-Courier Verification</span>
+          </div>
+        </div>
       </div>
 
       {/* Input Form */}
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label htmlFor="phone-input" className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
-              Customer Mobile Number
-            </label>
-            <span className="text-[11px] font-mono text-slate-500">
-              {phoneNumber.length}/11 digits
-            </span>
-          </div>
-
-          <div className="relative flex items-center">
-            {/* Country flag & prefix badge (+880 fixed) */}
-            <div className="absolute left-3.5 flex items-center gap-1.5 pointer-events-none select-none text-slate-500 border-r border-slate-200 pr-2.5 z-10">
-              <span className="text-base" role="img" aria-label="Bangladesh Flag">🇧🇩</span>
-              <span className="text-sm font-semibold text-slate-700 font-mono">+880</span>
+      <div className="p-5 sm:p-7">
+        <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="phone-input" className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Customer Mobile Number
+              </label>
+              <span className="text-xs font-mono font-medium text-slate-500">
+                {phoneNumber.length}/11 digits
+              </span>
             </div>
 
-            <input
-              id="phone-input"
-              type="tel"
-              inputMode="numeric"
-              autoComplete="tel"
-              maxLength={11}
-              disabled={isLoading || disabled}
-              placeholder="01XXXXXXXXX"
-              value={phoneNumber}
-              onChange={(e) => processInput(e.target.value)}
-              onPaste={handlePaste}
-              className={`w-full h-14 pl-28 pr-12 text-lg font-mono font-medium rounded-xl border bg-white transition-all outline-none placeholder:text-slate-400 placeholder:font-sans ${
-                errorMessage
-                  ? 'border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-50'
-                  : isComplete
-                  ? 'border-emerald-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50'
-                  : 'border-slate-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-50'
-              } disabled:bg-slate-50 disabled:text-slate-400`}
-            />
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1 flex items-center">
+                {/* BD Flag & Prefix Pill */}
+                <div className="absolute left-3 flex items-center gap-1.5 pointer-events-none text-slate-500 z-10 select-none border-r border-slate-200 pr-2.5">
+                  <span className="text-base" role="img" aria-label="Bangladesh Flag">🇧🇩</span>
+                  <span className="text-xs font-mono font-semibold text-slate-700">+88</span>
+                </div>
 
-            {/* Clear Button */}
-            {phoneNumber && !isLoading && (
+                <input
+                  id="phone-input"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  maxLength={11}
+                  disabled={isLoading || disabled}
+                  placeholder="01XXXXXXXXX"
+                  value={phoneNumber}
+                  onChange={(e) => processInput(e.target.value)}
+                  onPaste={handlePaste}
+                  className={`w-full h-12 pl-24 pr-11 text-base font-mono font-semibold rounded-xl border bg-white transition-all outline-none placeholder:text-slate-400 placeholder:font-mono ${
+                    errorMessage
+                      ? 'border-rose-400 focus:border-rose-500 focus:ring-4 focus:ring-rose-50'
+                      : isComplete
+                      ? 'border-emerald-500 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50'
+                      : 'border-slate-300 focus:border-slate-900 focus:ring-4 focus:ring-slate-900/10'
+                  } disabled:bg-slate-50 disabled:text-slate-400`}
+                />
+
+                {/* Clear Button */}
+                {phoneNumber && !isLoading && (
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                    title="Clear number"
+                    aria-label="Clear number"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Loading spinner inside input */}
+                {isLoading && (
+                  <div className="absolute right-3.5 flex items-center">
+                    <div className="h-4 w-4 rounded-full border-2 border-slate-900 border-t-transparent animate-spin" />
+                  </div>
+                )}
+              </div>
+
+              {/* High-Contrast Search Button */}
               <button
-                type="button"
-                onClick={handleClear}
-                className="absolute right-3.5 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                title="Clear number"
-                aria-label="Clear number"
+                type="submit"
+                id="check-customer-btn"
+                disabled={isLoading || disabled}
+                className="h-12 sm:w-32 flex items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 px-6 font-bold text-sm text-white shadow-xs active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
               >
-                <X className="w-4 h-4" />
+                {isLoading ? (
+                  <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 stroke-[2.3]" />
+                    <span>Check</span>
+                  </>
+                )}
               </button>
-            )}
+            </div>
 
-            {/* Auto-checking spinner in input */}
-            {isLoading && (
-              <div className="absolute right-3.5 flex items-center">
-                <div className="h-4 w-4 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" />
-              </div>
-            )}
+            {/* Error or Auto-check status */}
+            <div className="mt-2 flex items-center justify-between min-h-[18px]">
+              {errorMessage ? (
+                <div className="flex items-center gap-1.5 text-xs font-medium text-rose-600" id="phone-error-msg">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              ) : isComplete && isLoading ? (
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <div className="h-3.5 w-3.5 rounded-full border-2 border-slate-900 border-t-transparent animate-spin" />
+                  <span>Checking SteadFast, Pathao, RedX, Paperfly records...</span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                  ১১ ডিজিটের মোবাইল নম্বর লিখলেই অটোমেটিক চেক হবে (013-019)
+                </p>
+              )}
+            </div>
           </div>
-
-          {/* Feedback & Auto-check indicator */}
-          <div className="mt-2 flex items-center justify-between min-h-[20px]">
-            {errorMessage ? (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 animate-in fade-in duration-150" id="phone-error-msg">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>{errorMessage}</span>
-              </div>
-            ) : isComplete && isLoading ? (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-sky-600 animate-in fade-in duration-150">
-                <div className="h-3 w-3 rounded-full border-2 border-sky-600 border-t-transparent animate-spin" />
-                <span>সম্পুর্ন নাম্বার পাওয়া গেছে, একাই চেকিং হচ্ছে... (Auto-checking...)</span>
-              </div>
-            ) : isComplete ? (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 animate-in fade-in duration-150">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>১১ ডিজিট নাম্বার প্রস্তুত (Auto-verified)</span>
-              </div>
-            ) : (
-              <p className="text-[11px] text-slate-500">
-                ১১ ডিজিট নাম্বার লিখলেই স্বয়ংক্রিয়ভাবে চেকিং হবে • বাংলা ও ইংরেজি উভয় সমর্থন করে
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Submit Button */}
-        <button
-          type="submit"
-          id="check-customer-btn"
-          disabled={isLoading || disabled}
-          className="w-full h-13 flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 font-semibold text-base text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-        >
-          {isLoading ? (
-            <>
-              <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-              <span>Checking Records...</span>
-            </>
-          ) : (
-            <>
-              <Search className="w-4 h-4 stroke-[2.5]" />
-              <span>Check Customer</span>
-            </>
-          )}
-        </button>
-      </form>
-
-      {/* Quick Interactive Samples */}
-      <div className="mt-5 pt-4 border-t border-slate-100">
-        <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-          <span className="font-medium">Quick Test Profiles:</span>
-          <span className="text-[11px] text-slate-400">Click to preview scenarios</span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => handleQuickSelect('01711122233')}
-            className="text-xs px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors font-medium cursor-pointer"
-          >
-            Safe (93% Delv.)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickSelect('01812345655')}
-            className="text-xs px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors font-medium cursor-pointer"
-          >
-            Moderate Risk
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickSelect('01912345689')}
-            className="text-xs px-2.5 py-1 rounded-md bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 transition-colors font-medium cursor-pointer"
-          >
-            High Risk (Returns)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickSelect('01700000000')}
-            className="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors font-medium cursor-pointer"
-          >
-            No Record
-          </button>
-        </div>
+        </form>
       </div>
     </div>
   );

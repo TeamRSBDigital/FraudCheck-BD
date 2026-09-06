@@ -12,15 +12,15 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLegal }) => {
         {/* Brand & Mission */}
         <div className="text-center md:text-left space-y-1.5">
           <div className="flex items-center justify-center md:justify-start gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white">
-              <Shield className="h-4 w-4 text-sky-400" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white">
+              <Shield className="h-4 w-4 text-white" />
             </div>
             <span className="font-bold text-slate-900 font-display">
-              FraudCheck <span className="text-sky-600">BD</span>
+              BD Courier <span className="text-blue-600">Track</span>
             </span>
           </div>
           <p className="text-xs text-slate-500 max-w-sm">
-            Customer delivery risk insights from available courier history.
+            Check courier order history & success rates across Bangladesh.
           </p>
         </div>
 
@@ -69,18 +69,18 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLegal }) => {
       </div>
 
       <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-2">
-        <p>© {new Date().getFullYear()} FraudCheck BD. Built for the Bangladeshi online commerce ecosystem.</p>
+        <p>© {new Date().getFullYear()} Developed by <span className="font-semibold text-slate-700">RAYHAN BISWAS</span>. All rights reserved.</p>
         <p>
-          Data & API credit provided by{' '}
+          Powered by BD Courier API (
           <a
             href="https://courier.com.bd/"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-medium text-slate-600 hover:text-sky-600 underline decoration-slate-300"
+            className="font-medium text-slate-600 hover:text-blue-600 underline decoration-slate-300"
           >
             courier.com.bd
           </a>
-          . Results reflect recorded courier deliveries only.
+          ). Results reflect recorded courier shipments.
         </p>
       </div>
     </footer>

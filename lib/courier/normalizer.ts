@@ -54,13 +54,7 @@ function normalizeCourierEntry(id: string, name: string, raw: RawCourierEntry): 
     raw.returned_parcel ?? raw.returned
   );
 
-  // If there are zero recorded parcels for this courier, omit
-  if (totalOrders === 0 && delivered === 0 && rawCancelled === 0 && rawReturned === 0) {
-    return null;
-  }
-
-  // If BD Courier only returns cancelled_parcel (which represents non-delivered parcels),
-  // distinguish returned vs cancelled gracefully
+  // Distinguish returned vs cancelled gracefully
   let returned = rawReturned;
   let cancelled = rawCancelled;
   if (rawReturned === 0 && rawCancelled > 0 && totalOrders > 0) {

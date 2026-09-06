@@ -2,17 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { CheckerForm } from './components/CheckerForm';
 import { LoadingState } from './components/LoadingState';
-import { RiskScoreCard } from './components/RiskScoreCard';
-import { SummaryStats } from './components/SummaryStats';
-import { RiskIndicators } from './components/RiskIndicators';
-import { CourierGrid } from './components/CourierGrid';
+import { ReviewRecommendationBanner } from './components/ReviewRecommendationBanner';
+import { SaaSMetricCards } from './components/SaaSMetricCards';
+import { CourierTable } from './components/CourierTable';
+import { DeliveryStatusDonut } from './components/DeliveryStatusDonut';
+import { BottomAlertBanner } from './components/BottomAlertBanner';
 import { EmptyState } from './components/EmptyState';
 import { ErrorState } from './components/ErrorState';
 import { RateLimitBanner } from './components/RateLimitBanner';
+import { MerchantBenefits } from './components/MerchantBenefits';
 import { LegalModal } from './components/LegalModal';
 import { Footer } from './components/Footer';
 import { PhoneCheckResponse } from './types/index';
-import { RotateCcw, Printer } from 'lucide-react';
+import { RotateCcw, Printer, Info } from 'lucide-react';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -30,7 +32,7 @@ export default function App() {
 
   const checkerRef = useRef<HTMLDivElement>(null);
 
-  // Initial fetch of rate limit status
+  // Initial fetch of rate limit status only - no automatic check on reload to save user tokens
   useEffect(() => {
     async function fetchRateLimit() {
       try {
@@ -48,14 +50,63 @@ export default function App() {
     fetchRateLimit();
   }, []);
 
+  // Dynamic SEO page title and meta tag updates based on application state
+  useEffect(() => {
+    const baseTitle = 'FraudCheck BD — Customer Delivery Risk Checker';
+    const baseDescription =
+      'Check available Bangladesh courier delivery history and assess customer delivery risk before shipping.';
+
+    let pageTitle = baseTitle;
+    let metaDescription = baseDescription;
+
+    if (isLoading) {
+      const target = lastQueriedPhone || 'Customer';
+      pageTitle = `Checking ${target}... | FraudCheck BD`;
+      metaDescription = `Verifying courier delivery records and assessing delivery risk for ${target}...`;
+    } else if (errorMessage) {
+      pageTitle = 'Check Failed | FraudCheck BD';
+      metaDescription = errorMessage;
+    } else if (report) {
+      const phoneDisplay = report.maskedPhone || lastQueriedPhone || 'Customer';
+      if (report.hasData && report.data) {
+        pageTitle = `Customer Report: ${phoneDisplay} | FraudCheck BD`;
+        const successRate = report.data.successRate;
+        const total = report.data.totalOrders;
+        const riskLevel = report.risk?.level || 'ASSESSED';
+        metaDescription = `Customer Report for ${phoneDisplay}: ${successRate}% delivery success rate across ${total} courier orders. Assessed risk: ${riskLevel}.`;
+      } else {
+        pageTitle = `Customer Report: ${phoneDisplay} (No History) | FraudCheck BD`;
+        metaDescription = `No courier delivery history found for ${phoneDisplay} across Bangladesh partner courier networks.`;
+      }
+    }
+
+    // Update document title
+    document.title = pageTitle;
+
+    // Helper to safely set meta tags
+    const setMetaTag = (selector: string, content: string) => {
+      const el = document.querySelector(selector);
+      if (el) {
+        el.setAttribute('content', content);
+      }
+    };
+
+    setMetaTag('meta[name="description"]', metaDescription);
+    setMetaTag('meta[property="og:title"]', pageTitle);
+    setMetaTag('meta[property="og:description"]', metaDescription);
+    setMetaTag('meta[name="twitter:title"]', pageTitle);
+    setMetaTag('meta[name="twitter:description"]', metaDescription);
+  }, [isLoading, report, errorMessage, lastQueriedPhone]);
+
   const handleScrollToChecker = () => {
     checkerRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const phoneInput = document.getElementById('phone-input') as HTMLInputElement | null;
+    phoneInput?.focus();
   };
 
   const handleCheckCustomer = async (phone: string) => {
     setIsLoading(true);
     setErrorMessage(null);
-    setReport(null);
     setLastQueriedPhone(phone);
 
     try {
@@ -67,7 +118,7 @@ export default function App() {
         body: JSON.stringify({ phone }),
       });
 
-      const data = await response.json() as PhoneCheckResponse;
+      const data = (await response.json()) as PhoneCheckResponse;
 
       if (!response.ok) {
         // Handle 429 Rate Limit
@@ -114,15 +165,16 @@ export default function App() {
   const isRateLimited = remainingChecks !== null && remainingChecks <= 0;
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50/50">
+    <div className="min-h-screen flex flex-col bg-slate-50/60 font-sans">
       {/* Top Navbar */}
       <Navbar
         remainingChecks={remainingChecks}
         totalLimit={totalLimit}
+        onFocusSearch={handleScrollToChecker}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-8 pb-16 space-y-8">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-8 pb-16 space-y-6">
         {/* Rate Limit Reached Warning if applicable */}
         {isRateLimited && (
           <RateLimitBanner
@@ -141,7 +193,7 @@ export default function App() {
           />
         </section>
 
-        {/* Dynamic State Display: Loading, Error, Result, or Empty */}
+        {/* Dynamic State Display: Loading, Error, Result, or Merchant Showcase */}
         {isLoading && <LoadingState phone={lastQueriedPhone} />}
 
         {!isLoading && errorMessage && (
@@ -152,33 +204,80 @@ export default function App() {
           />
         )}
 
+        {!isLoading && !report && !errorMessage && (
+          <MerchantBenefits
+            onSelectSample={handleCheckCustomer}
+            disabled={isRateLimited}
+          />
+        )}
+
         {/* Result Dashboard */}
         {!isLoading && report && (
           <section className="space-y-6 animate-in fade-in duration-300">
+            {/* Account / Subscription API Notice */}
+            {report.apiNotice && (
+              <div
+                className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 text-xs text-amber-950 shadow-xs"
+                id="api-notice-banner"
+              >
+                <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 stroke-[2]" />
+                <div className="leading-relaxed font-medium">
+                  <span className="font-bold text-amber-950">Notice:</span> {report.apiNotice}
+                </div>
+              </div>
+            )}
+
             {report.hasData && report.risk && report.data ? (
               <>
-                {/* Score and Main Verdict Card */}
-                <RiskScoreCard
+                {/* 1. Review / Recommendation Alert Banner */}
+                <ReviewRecommendationBanner
                   risk={report.risk}
-                  maskedPhone={report.maskedPhone}
-                  queryTimestamp={report.queryTimestamp}
-                  isMockData={report.isMockData}
+                  successRate={report.data.successRate}
+                  onPrint={handlePrint}
+                  phone={report.maskedPhone}
                 />
 
-                {/* Summary Aggregate Stats */}
-                <SummaryStats data={report.data} />
+                {/* 2. 4 Stat Metric Cards */}
+                <SaaSMetricCards
+                  totalOrders={report.data.totalOrders}
+                  delivered={report.data.delivered}
+                  cancelled={report.data.cancelled + (report.data.returned > report.data.cancelled ? report.data.returned - report.data.cancelled : 0)}
+                  successRate={report.data.successRate}
+                />
 
-                {/* Deterministic Indicators */}
-                <RiskIndicators indicators={report.risk.indicators} />
+                {/* 3. Side-by-Side 2-Column Section: Courier Table & Donut Chart */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                  {/* Left Column: Courier Breakdown Table (7 cols on lg) */}
+                  <div className="lg:col-span-7 h-full">
+                    <CourierTable
+                      couriers={report.data.couriers}
+                      totalOrders={report.data.totalOrders}
+                      delivered={report.data.delivered}
+                      cancelled={report.data.cancelled + (report.data.returned > report.data.cancelled ? report.data.returned - report.data.cancelled : 0)}
+                    />
+                  </div>
 
-                {/* Individual Courier Network Breakdown */}
-                <CourierGrid couriers={report.data.couriers} />
+                  {/* Right Column: Delivery Status Donut Chart (5 cols on lg) */}
+                  <div className="lg:col-span-5 h-full">
+                    <DeliveryStatusDonut
+                      successful={report.data.delivered}
+                      cancelled={report.data.cancelled + (report.data.returned > report.data.cancelled ? report.data.returned - report.data.cancelled : 0)}
+                      successRate={report.data.successRate}
+                    />
+                  </div>
+                </div>
 
-                {/* Action Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200">
+                {/* 4. Bottom Alert Banner */}
+                <BottomAlertBanner
+                  risk={report.risk}
+                  successRate={report.data.successRate}
+                />
+
+                {/* 5. Action Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                   <button
                     onClick={handleReset}
-                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 font-semibold text-sm text-white shadow-sm hover:bg-slate-800 transition-all active:scale-[0.98] cursor-pointer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 font-semibold text-sm text-white shadow-xs hover:bg-slate-800 transition-all active:scale-[0.98] cursor-pointer"
                     id="check-another-btn"
                   >
                     <RotateCcw className="w-4 h-4" />
@@ -187,7 +286,7 @@ export default function App() {
 
                   <button
                     onClick={handlePrint}
-                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-medium text-sm text-slate-700 border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-medium text-sm text-slate-700 border border-slate-200 shadow-xs hover:bg-slate-50 transition-colors cursor-pointer"
                     id="print-report-btn"
                   >
                     <Printer className="w-4 h-4 text-slate-500" />
@@ -203,13 +302,10 @@ export default function App() {
             )}
           </section>
         )}
-
-
       </main>
 
       {/* Footer */}
       <Footer onOpenLegal={(tab) => setLegalModalTab(tab)} />
-
 
       <LegalModal
         isOpen={legalModalTab !== null}

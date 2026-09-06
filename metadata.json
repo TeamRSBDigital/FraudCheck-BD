@@ -1,0 +1,7 @@
+{
+  "name": "FraudCheck BD",
+  "description": "Check available Bangladesh courier delivery history and assess customer delivery risk before shipping.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

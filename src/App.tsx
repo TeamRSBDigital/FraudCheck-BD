@@ -29,7 +29,7 @@ export default function App() {
   const [resetTimestamp, setResetTimestamp] = useState<number | undefined>(undefined);
 
   // Modals
-  const [legalModalTab, setLegalModalTab] = useState<'privacy' | 'terms' | 'contact' | null>(null);
+  const [legalModalTab, setLegalModalTab] = useState<'privacy' | 'terms' | 'license' | 'contact' | null>(null);
 
   const checkerRef = useRef<HTMLDivElement>(null);
 
@@ -180,7 +180,7 @@ export default function App() {
   const isRateLimited = remainingChecks !== null && remainingChecks <= 0;
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50/60 font-sans">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-blue-50/50 via-slate-50 to-indigo-50/20 font-sans">
       {/* Top Navbar */}
       <Navbar
         remainingChecks={remainingChecks}

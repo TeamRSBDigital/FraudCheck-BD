@@ -103,11 +103,12 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
       id="checker-card"
       className="relative rounded-2xl bg-white shadow-sm border border-slate-200/90 overflow-hidden transition-all"
     >
-      {/* SaaS Header Banner with High-Contrast Navy/Slate Theme */}
-      <div className="bg-slate-900 px-6 py-5 text-white border-b border-slate-800">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      {/* SaaS Header Banner with Rich Navy-to-Indigo Gradient */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 px-6 py-5 text-white border-b border-indigo-900/60 relative overflow-hidden">
+        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 relative z-10">
           <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-slate-800/90 border border-slate-700/80 text-[11px] font-medium text-slate-300 mb-1.5">
+            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-indigo-900/60 border border-indigo-700/60 text-[11px] font-medium text-indigo-200 mb-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span>Bangladesh Courier Fraud Intelligence</span>
             </div>
@@ -118,7 +119,7 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
               পার্সেল পাঠানোর পূর্বে কাস্টমারের ডেলিভারি হিস্ট্রি ও রিস্ক লেভেল যাচাই করুন
             </p>
           </div>
-          <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-700/60 self-start sm:self-center">
+          <div className="hidden md:flex items-center gap-2 text-xs text-indigo-200 bg-indigo-900/40 px-3 py-1.5 rounded-xl border border-indigo-700/50 self-start sm:self-center">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>Multi-Courier Verification</span>
           </div>
@@ -187,12 +188,12 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
                 )}
               </div>
 
-              {/* High-Contrast Search Button */}
+              {/* High-Contrast Vibrant Search Button */}
               <button
                 type="submit"
                 id="check-customer-btn"
                 disabled={isLoading || disabled}
-                className="h-12 sm:w-32 flex items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 px-6 font-bold text-sm text-white shadow-xs active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                className="h-12 sm:w-32 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.98] px-6 font-bold text-sm text-white shadow-sm shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
               >
                 {isLoading ? (
                   <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />

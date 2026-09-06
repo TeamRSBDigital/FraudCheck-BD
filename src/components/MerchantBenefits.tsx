@@ -14,11 +14,11 @@ export const MerchantBenefits: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* 3 Core Value Props for E-Commerce Merchants */}
+      {/* 3 Core Value Props with Colorful Gradients */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-slate-300 transition-all">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 mb-3.5">
-            <ShieldCheck className="w-5 h-5 stroke-[2]" />
+        <div className="rounded-2xl border border-emerald-100/90 bg-gradient-to-br from-emerald-50/60 via-white to-teal-50/40 p-5 shadow-xs hover:border-emerald-300 hover:shadow-sm transition-all">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-600 shadow-sm shadow-emerald-500/25 flex items-center justify-center text-white mb-3.5">
+            <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
           </div>
           <h4 className="text-sm font-bold text-slate-900 font-display">
             Reduce Return Delivery Losses
@@ -28,9 +28,9 @@ export const MerchantBenefits: React.FC = () => {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-slate-300 transition-all">
-          <div className="w-10 h-10 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 mb-3.5">
-            <Truck className="w-5 h-5 stroke-[2]" />
+        <div className="rounded-2xl border border-blue-100/90 bg-gradient-to-br from-blue-50/60 via-white to-indigo-50/40 p-5 shadow-xs hover:border-blue-300 hover:shadow-sm transition-all">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-sm shadow-blue-500/25 flex items-center justify-center text-white mb-3.5">
+            <Truck className="w-5 h-5 stroke-[2.2]" />
           </div>
           <h4 className="text-sm font-bold text-slate-900 font-display">
             Unified Bangladesh Logistics
@@ -40,9 +40,9 @@ export const MerchantBenefits: React.FC = () => {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-slate-300 transition-all">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 mb-3.5">
-            <AlertTriangle className="w-5 h-5 stroke-[2]" />
+        <div className="rounded-2xl border border-amber-100/90 bg-gradient-to-br from-amber-50/60 via-white to-orange-50/40 p-5 shadow-xs hover:border-amber-300 hover:shadow-sm transition-all">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 shadow-sm shadow-amber-500/25 flex items-center justify-center text-white mb-3.5">
+            <AlertTriangle className="w-5 h-5 stroke-[2.2]" />
           </div>
           <h4 className="text-sm font-bold text-slate-900 font-display">
             Smart Advance Fee Advice
@@ -54,7 +54,7 @@ export const MerchantBenefits: React.FC = () => {
       </div>
 
       {/* Supported Couriers Strip with Real Logos */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs">
+      <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-r from-slate-50/70 via-white to-blue-50/40 p-4 sm:p-5 shadow-xs">
         <div className="text-center mb-3">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
             Supported Logistics Partners across Bangladesh
@@ -64,7 +64,7 @@ export const MerchantBenefits: React.FC = () => {
           {supportedCouriers.map((c) => (
             <div
               key={c.id}
-              className="flex items-center justify-center h-10 w-28 sm:w-32 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 transition-all shadow-2xs"
+              className="flex items-center justify-center h-10 w-28 sm:w-32 px-3 py-1.5 rounded-xl border border-slate-200/90 bg-white hover:border-blue-300 hover:shadow-xs transition-all shadow-2xs"
             >
               <CourierLogo id={c.id} name={c.name} className="max-h-6 w-auto max-w-full" />
             </div>

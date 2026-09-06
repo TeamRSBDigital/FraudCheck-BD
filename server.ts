@@ -17,6 +17,18 @@ async function startServer() {
   app.use(express.json({ limit: '100kb' }));
   app.disable('x-powered-by');
 
+  // CORS and iframe integration headers
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
   // Trust proxy for proper client IP resolution in reverse-proxied containers (Cloud Run, Vercel)
   app.set('trust proxy', 1);
 

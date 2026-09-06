@@ -71,7 +71,7 @@ export class BdCourierClient {
       for (const endpoint of endpoints) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout for cross-network query
+          const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s fast timeout per endpoint
 
           const response = await fetch(endpoint, {
             method: 'POST',
@@ -183,11 +183,16 @@ export class BdCourierClient {
     };
   }
 
-  /**
-   * Deterministic sandbox data generator based on phone number patterns.
-   * Useful for testing all 4 primary UI states: Low Risk, Medium Risk, High Risk, No Data.
-   */
   public getSandboxProfile(phone: string): RawBdCourierResponse | null {
+    return getSandboxProfile(phone);
+  }
+}
+
+/**
+ * Deterministic sandbox data generator based on phone number patterns.
+ * Useful for testing all 4 primary UI states: Low Risk, Medium Risk, High Risk, No Data.
+ */
+export function getSandboxProfile(phone: string): RawBdCourierResponse | null {
     // Profile 1: No Data (numbers ending in 00, 99, or containing all zeroes)
     if (phone.endsWith('00') || phone.endsWith('99') || phone === '01700000000') {
       return {
@@ -388,4 +393,4 @@ export class BdCourierClient {
       },
     };
   }
-}
+

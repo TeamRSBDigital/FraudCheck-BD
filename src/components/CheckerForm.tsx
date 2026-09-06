@@ -75,6 +75,8 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isLoading || disabled) return;
+
     if (!phoneNumber) {
       setErrorMessage('Please enter an 11-digit mobile number');
       return;

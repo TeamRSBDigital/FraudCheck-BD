@@ -9,12 +9,10 @@ import { CourierGrid } from './components/CourierGrid';
 import { EmptyState } from './components/EmptyState';
 import { ErrorState } from './components/ErrorState';
 import { RateLimitBanner } from './components/RateLimitBanner';
-import { HowItWorksModal } from './components/HowItWorksModal';
-import { AboutModal } from './components/AboutModal';
 import { LegalModal } from './components/LegalModal';
 import { Footer } from './components/Footer';
 import { PhoneCheckResponse } from './types/index';
-import { RotateCcw, Printer, HelpCircle, ShieldCheck, ArrowRight, Truck } from 'lucide-react';
+import { RotateCcw, Printer } from 'lucide-react';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -28,8 +26,6 @@ export default function App() {
   const [resetTimestamp, setResetTimestamp] = useState<number | undefined>(undefined);
 
   // Modals
-  const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
-  const [showAbout, setShowAbout] = useState<boolean>(false);
   const [legalModalTab, setLegalModalTab] = useState<'privacy' | 'terms' | 'contact' | null>(null);
 
   const checkerRef = useRef<HTMLDivElement>(null);
@@ -123,32 +119,10 @@ export default function App() {
       <Navbar
         remainingChecks={remainingChecks}
         totalLimit={totalLimit}
-        onOpenHowItWorks={() => setShowHowItWorks(true)}
-        onOpenAbout={() => setShowAbout(true)}
-        onScrollToChecker={handleScrollToChecker}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-16 space-y-12">
-        {/* Hero Section */}
-        <section className="text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
-            <span className="flex h-2 w-2 rounded-full bg-sky-500" />
-            <span>Authorized BD Courier Intelligence</span>
-          </div>
-
-          <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-950 tracking-tight font-display leading-[1.15]">
-            Check Customer Delivery Risk <br className="hidden sm:inline" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-slate-950 via-slate-800 to-sky-800">
-              Before You Ship
-            </span>
-          </h1>
-
-          <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Review available courier delivery history and make more informed order decisions. Reduce returned Cash-on-Delivery orders across Bangladesh.
-          </p>
-        </section>
-
+      <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-8 pb-16 space-y-8">
         {/* Rate Limit Reached Warning if applicable */}
         {isRateLimited && (
           <RateLimitBanner
@@ -230,70 +204,12 @@ export default function App() {
           </section>
         )}
 
-        {/* Feature Explainer / Educational Value Section for BD Merchants */}
-        <section className="mt-16 rounded-2xl bg-white p-8 sm:p-10 border border-slate-200/90 shadow-sm">
-          <div className="max-w-2xl mb-8">
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-950 font-display">
-              Protect Your E-Commerce Margin from Return Losses
-            </h3>
-            <p className="mt-1.5 text-sm text-slate-600">
-              Courier Return to Origin (RTO) is one of the highest operational expenses for online shops in Bangladesh.
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="p-5 rounded-xl bg-slate-50/70 border border-slate-100">
-              <div className="w-10 h-10 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold mb-3 font-mono text-sm">
-                01
-              </div>
-              <h4 className="text-base font-bold text-slate-900 mb-1">
-                Cash-on-Delivery Security
-              </h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Spot repeat return patterns before dispatching packages with high return transport fees.
-              </p>
-            </div>
-
-            <div className="p-5 rounded-xl bg-slate-50/70 border border-slate-100">
-              <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold mb-3 font-mono text-sm">
-                02
-              </div>
-              <h4 className="text-base font-bold text-slate-900 mb-1">
-                Multi-Courier Verification
-              </h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Aggregated records cross-check Pathao, SteadFast, RedX, Paperfly, CourierFast, and CarryBee.
-              </p>
-            </div>
-
-            <div className="p-5 rounded-xl bg-slate-50/70 border border-slate-100">
-              <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold mb-3 font-mono text-sm">
-                03
-              </div>
-              <h4 className="text-base font-bold text-slate-900 mb-1">
-                Objective Decision Making
-              </h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Transparent delivery risk scores empower your team to ask for partial advance payment when needed.
-              </p>
-            </div>
-          </div>
-        </section>
       </main>
 
       {/* Footer */}
       <Footer onOpenLegal={(tab) => setLegalModalTab(tab)} />
 
-      {/* Modals */}
-      <HowItWorksModal
-        isOpen={showHowItWorks}
-        onClose={() => setShowHowItWorks(false)}
-      />
-
-      <AboutModal
-        isOpen={showAbout}
-        onClose={() => setShowAbout(false)}
-      />
 
       <LegalModal
         isOpen={legalModalTab !== null}

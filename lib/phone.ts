@@ -36,7 +36,7 @@ export function sanitizePhoneInput(raw: string): string {
   // 1. Convert any Bengali/Arabic digits to English digits
   const converted = convertToEnglishDigits(raw);
 
-  // 2. Strip non-digits
+  // 2. Strip non-digits (remove everything except 0-9)
   let digits = converted.replace(/\D/g, '');
 
   // 3. Handle pasted country code (+880 or 880)
@@ -46,7 +46,12 @@ export function sanitizePhoneInput(raw: string): string {
     digits = digits.substring(2); // strip 88
   }
 
-  // 4. Strictly cap at 11 digits maximum
+  // 4. If 10 digits were entered starting with 1 (e.g. 1711122233 after +880), prepend '0'
+  if (digits.length === 10 && digits.startsWith('1')) {
+    digits = '0' + digits;
+  }
+
+  // 5. Strictly cap at 11 digits maximum
   return digits.slice(0, 11);
 }
 

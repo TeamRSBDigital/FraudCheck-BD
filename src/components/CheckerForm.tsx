@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, ShieldCheck, Zap, PackageCheck, AlertCircle, Sparkles, X, CheckCircle2 } from 'lucide-react';
+import { Search, AlertCircle, X, CheckCircle2 } from 'lucide-react';
 import { isValidBdPhone, normalizeBdPhone, sanitizePhoneInput, isCompleteBdPhone } from '../../lib/phone';
 
 interface CheckerFormProps {
@@ -20,26 +20,26 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
 
   const processInput = (rawVal: string) => {
     setIsTouched(true);
+    // Automatically strip non-numeric characters (convert Bengali/Arabic numerals) and strictly cap at 11 digits
     const sanitized = sanitizePhoneInput(rawVal);
     setPhoneNumber(sanitized);
 
-    // Auto-check when complete
-    if (isCompleteBdPhone(sanitized)) {
-      const normalized = normalizeBdPhone(sanitized);
-      setErrorMessage(null);
-
-      // Auto-trigger if new number and not currently loading/disabled
-      if (normalized !== lastAutoCheckedRef.current && !disabled && !isLoading) {
-        lastAutoCheckedRef.current = normalized;
-        onSubmit(normalized);
+    // Immediately trigger the 'Check Customer' action once exactly 11 digits are entered
+    if (sanitized.length === 11) {
+      if (isValidBdPhone(sanitized)) {
+        setErrorMessage(null);
+        // Seamlessly auto-submit
+        if (sanitized !== lastAutoCheckedRef.current && !isLoading) {
+          lastAutoCheckedRef.current = sanitized;
+          onSubmit(sanitized);
+        }
+      } else {
+        setErrorMessage('Enter a valid Bangladeshi mobile number starting with 013 - 019.');
       }
     } else {
-      // Invalidate cache so user can re-trigger if they delete & retype
+      // Invalidate cache so user can re-trigger if they delete or modify digits
       lastAutoCheckedRef.current = '';
-
-      if (sanitized.length >= 11 && !isValidBdPhone(sanitized)) {
-        setErrorMessage('Enter a valid Bangladeshi mobile number (013 - 019).');
-      } else {
+      if (sanitized.length < 11) {
         setErrorMessage(null);
       }
     }
@@ -48,7 +48,12 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text');
-    processInput(pasted);
+    const target = e.currentTarget;
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? phoneNumber.length;
+    // Combine current value with pasted text, removing non-numeric chars
+    const combined = phoneNumber.slice(0, start) + pasted + phoneNumber.slice(end);
+    processInput(combined);
   };
 
   const handleClear = () => {
@@ -62,34 +67,28 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
     if (e) e.preventDefault();
     setIsTouched(true);
 
-    const normalized = normalizeBdPhone(phoneNumber);
+    const cleaned = sanitizePhoneInput(phoneNumber);
 
-    if (!normalized) {
+    if (!cleaned) {
       setErrorMessage('Please enter a Bangladeshi mobile number.');
       return;
     }
 
-    if (!isValidBdPhone(normalized)) {
+    if (cleaned.length !== 11 || !isValidBdPhone(cleaned)) {
       setErrorMessage('Enter a valid 11-digit Bangladeshi mobile number (013 - 019).');
       return;
     }
 
     setErrorMessage(null);
-    lastAutoCheckedRef.current = normalized;
-    onSubmit(normalized);
+    lastAutoCheckedRef.current = cleaned;
+    onSubmit(cleaned);
   };
 
   const handleQuickSelect = (samplePhone: string) => {
-    const sanitized = sanitizePhoneInput(samplePhone);
-    setPhoneNumber(sanitized);
-    setIsTouched(true);
-    setErrorMessage(null);
-    const normalized = normalizeBdPhone(sanitized);
-    lastAutoCheckedRef.current = normalized;
-    onSubmit(normalized);
+    processInput(samplePhone);
   };
 
-  const isComplete = isCompleteBdPhone(phoneNumber);
+  const isComplete = phoneNumber.length === 11 && isValidBdPhone(phoneNumber);
 
   return (
     <div
@@ -97,16 +96,12 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
       className="relative rounded-2xl bg-white p-6 sm:p-8 shadow-sm border border-slate-200/90 max-w-2xl mx-auto transition-all"
     >
       {/* Header */}
-      <div className="text-center sm:text-left mb-6">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-100 mb-2.5">
-          <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-          Bangladesh Courier Network Check
-        </div>
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-950 font-display">
-          Check a Customer
+      <div className="mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-950 font-display">
+          Check Customer
         </h2>
-        <p className="mt-1.5 text-sm sm:text-base text-slate-600">
-          Enter a customer's mobile number to view available delivery history and courier risk indicators.
+        <p className="mt-1 text-sm text-slate-500">
+          Enter an 11-digit mobile number to view courier delivery records.
         </p>
       </div>
 
@@ -251,33 +246,6 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
           >
             No Record
           </button>
-        </div>
-      </div>
-
-      {/* Trust & Guarantee Row */}
-      <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-        <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-50/70">
-          <Zap className="w-4 h-4 text-sky-600 mb-1" />
-          <span className="text-xs font-semibold text-slate-800">Auto-Check</span>
-          <span className="text-[11px] text-slate-500">Instant on 11 digits</span>
-        </div>
-
-        <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-50/70">
-          <ShieldCheck className="w-4 h-4 text-emerald-600 mb-1" />
-          <span className="text-xs font-semibold text-slate-800">Secure</span>
-          <span className="text-[11px] text-slate-500">Encrypted server call</span>
-        </div>
-
-        <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-50/70">
-          <PackageCheck className="w-4 h-4 text-indigo-600 mb-1" />
-          <span className="text-xs font-semibold text-slate-800">Courier History</span>
-          <span className="text-[11px] text-slate-500">Multi-provider data</span>
-        </div>
-
-        <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-50/70">
-          <span className="text-xs font-bold text-slate-900 font-mono mb-0.5">50 Free</span>
-          <span className="text-xs font-semibold text-slate-800">Per Day</span>
-          <span className="text-[11px] text-slate-500">No account required</span>
         </div>
       </div>
     </div>

@@ -12,6 +12,12 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   onRetry,
   onReset,
 }) => {
+  const displayMessage = typeof message === 'string'
+    ? message
+    : (message && typeof message === 'object' && 'message' in (message as Record<string, unknown>))
+      ? String((message as { message?: unknown }).message || 'Verification could not be completed.')
+      : 'Unable to complete the check right now. Please try again in a moment.';
+
   return (
     <div
       id="api-error-state"
@@ -26,7 +32,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
       </h3>
 
       <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-        {message}
+        {displayMessage}
       </p>
 
       <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">

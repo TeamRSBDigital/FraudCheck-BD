@@ -1,20 +1,37 @@
 import type { Request, Response } from 'express';
-import { BdCourierClient } from '../lib/courier/bd-courier.ts';
-import { normalizeCourierData } from '../lib/courier/normalizer.ts';
-import { calculateDeliveryRisk } from '../lib/risk-engine.ts';
-import { defaultRateLimiter } from '../lib/rate-limiter.ts';
-import { isValidBdPhone, maskBdPhone, normalizeBdPhone } from '../lib/phone.ts';
+import { BdCourierClient } from '../lib/courier/bd-courier';
+import { normalizeCourierData } from '../lib/courier/normalizer';
+import { calculateDeliveryRisk } from '../lib/risk-engine';
+import { defaultRateLimiter } from '../lib/rate-limiter';
+import { isValidBdPhone, maskBdPhone, normalizeBdPhone } from '../lib/phone';
 
 const courierClient = new BdCourierClient();
 
 export default async function handler(req: Request, res: Response) {
+  // Add CORS headers for browser compatibility
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { phone } = req.body as { phone?: unknown };
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // use as is
+      }
+    }
+    const phone = body?.phone;
     const forwarded = req.headers['x-forwarded-for'];
     const clientIp = typeof forwarded === 'string'
       ? forwarded.split(',')[0].trim()

@@ -1,132 +1,195 @@
-# FraudCheck BD — Customer Delivery Risk Checker
+# FraudCheck BD
 
-A production-ready, mobile-first web application designed for Bangladeshi e-commerce merchants to assess customer delivery risk before dispatching Cash-on-Delivery (COD) orders.
+A mobile-first SaaS-style customer delivery-risk checker for Bangladeshi e-commerce merchants.
 
-FraudCheck BD connects with the authorized BD Courier API to cross-reference delivery history across major Bangladeshi logistics networks including **SteadFast, Pathao, RedX, Paperfly, CourierFast, and CarryBee**.
+FraudCheck BD is designed to query an authorized courier-history API from the server, normalize multi-courier delivery statistics, and present a clear risk-oriented report before a COD order is dispatched.
 
----
+> Data provider credit: [courier.com.bd](https://courier.com.bd/)  
+> Official API documentation: [courier.com.bd/api-docs](https://courier.com.bd/api-docs#endpoints)
 
-## Features
+## What this project does
 
-- **Mobile-First SaaS Experience:** Designed with a clean, high-contrast, professional interface optimized from 320px screens up to large ultra-wide monitors.
-- **Strict Data Privacy:** Phone numbers are masked in all client responses (`01*******89`), never logged unnecessarily, and never stored permanently in public directories.
-- **Deterministic Risk Engine:** Transparent scoring model (0–100) evaluating delivery completion ratio, return frequency, cancellation frequency, and multi-courier coverage.
-- **Zero Client-Side Secrets:** All courier API calls, authorization tokens, and validation checks are executed strictly server-side.
-- **Server-Enforced Rate Limiting:** 50 free checks per user/IP per calendar day enforced at the API layer with pluggable storage (in-memory or Redis).
-- **Graceful States:** Comprehensive UI states for Submitting, Step-by-Step Progress Loading, Low/Medium/High Risk, No Records Found, Daily Limit Reached, and API Error Recovery.
+- Validates Bangladesh mobile numbers (013–019).
+- Keeps the courier API key on the server only.
+- Queries one explicitly configured production endpoint.
+- Normalizes courier statistics into one consistent report.
+- Shows total orders, successful deliveries, cancellations/returns, success rate, and courier breakdown.
+- Calculates a deterministic delivery-risk assessment from delivery-history signals.
+- Masks the searched phone number in responses and reports.
+- Exports and prints merchant reports.
+- Enforces a daily free-check quota.
+- Supports Upstash Redis REST counters for Vercel/serverless deployments.
+- Includes an explicit demo mode for development; demo data is never used silently in production.
 
----
+## Production trust rules
 
-## Tech Stack
+FraudCheck BD does **not** silently invent courier history when the upstream service fails.
 
-- **Frontend:** React 19, TypeScript, Tailwind CSS v4, Lucide Icons, Google Fonts (DM Sans & Plus Jakarta Sans).
-- **Backend:** Express & Node.js, Vercel Serverless Function handlers (`/api/check`, `/api/health`, `/api/rate-limit`).
-- **Build Tool:** Vite 6, esbuild, tsx.
+If the production API is unavailable, misconfigured, rate-limited, or rejects the credentials, the UI shows an error. Simulated reports are available only when:
 
----
-
-## Project Structure
-
-```text
-├── api/                   # Vercel Serverless Function endpoints
-│   ├── check.ts           # POST /api/check route handler
-│   └── health.ts          # GET /api/health route handler
-├── lib/
-│   ├── courier/
-│   │   ├── bd-courier.ts  # BD Courier API client & isolated dev sandbox
-│   │   ├── normalizer.ts  # Universal courier response normalizer
-│   │   └── types.ts       # Courier schemas and provider interfaces
-│   ├── phone.ts           # Bangladesh mobile number normalization & privacy masking
-│   ├── rate-limiter.ts    # Reusable rate limiting abstraction (memory / Redis)
-│   └── risk-engine.ts     # Deterministic delivery risk assessment engine
-├── src/
-│   ├── components/
-│   │   ├── AboutModal.tsx       # About & mission modal
-│   │   ├── CheckerForm.tsx      # Phone input with Bangladesh prefix & validation
-│   │   ├── CourierCard.tsx      # Courier card with orders, returns, success rate
-│   │   ├── CourierGrid.tsx      # Responsive courier breakdown grid
-│   │   ├── EmptyState.tsx       # "No courier history found" state
-│   │   ├── ErrorState.tsx       # Friendly error handling state with retry
-│   │   ├── Footer.tsx           # SaaS footer with terms, privacy & quota
-│   │   ├── HowItWorksModal.tsx  # Detailed explanation of COD risk in Bangladesh
-│   │   ├── LegalModal.tsx       # Privacy policy, Terms of service & Contact form
-│   │   ├── LoadingState.tsx     # Step-by-step progress checklist & skeletons
-│   │   ├── Navbar.tsx           # Header with real-time remaining checks pill
-│   │   ├── RateLimitBanner.tsx  # Daily 50-check limit reached banner
-│   │   ├── RiskIndicators.tsx   # Transparent signal breakdown
-│   │   ├── RiskScoreCard.tsx    # Delivery Risk Score (0-100) and verdict card
-│   │   └── SummaryStats.tsx     # Aggregate orders, delivered, returned, cancelled
-│   ├── types/
-│   │   └── index.ts             # Shared TypeScript models and interfaces
-│   ├── App.tsx                  # Main application dashboard
-│   ├── index.css                # Tailwind CSS v4 styling
-│   └── main.tsx                 # React entry point
-├── server.ts              # Full-stack Node.js Express server + Vite middleware
-├── vercel.json            # Vercel deployment configuration
-├── .env.example           # Environment variables declaration
-└── package.json           # Scripts and dependencies
+```env
+ENABLE_DEMO_MODE="true"
 ```
 
----
+Do not enable demo mode when real merchant decisions are being made.
 
-## Environment Variables
+## Tech stack
 
-Copy `.env.example` to `.env`:
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- Vite 6
+- Express / Node.js for local full-stack development
+- Vercel Serverless Functions under `/api`
+- Optional Upstash Redis REST rate-limit persistence
+
+## Project structure
+
+```text
+.
+├── api/
+│   ├── check.ts
+│   ├── health.ts
+│   └── rate-limit.ts
+├── lib/
+│   ├── courier/
+│   │   ├── bd-courier.ts
+│   │   ├── normalizer.ts
+│   │   └── types.ts
+│   ├── phone.ts
+│   ├── rate-limiter.ts
+│   └── risk-engine.ts
+├── src/
+│   ├── components/
+│   ├── types/
+│   ├── utils/
+│   ├── App.tsx
+│   ├── index.css
+│   └── main.tsx
+├── .env.example
+├── server.ts
+├── vercel.json
+└── package.json
+```
+
+## Environment variables
+
+Copy the example file for local development:
 
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Required | Description |
-| :--- | :---: | :--- |
-| `BDCOURIER_API_URL` | Optional | BD Courier API endpoint (defaults to `https://api.bdcourier.com/courier-check`). |
-| `BDCOURIER_API_KEY` | Optional | Your authorized BD Courier API key/bearer token. If omitted or left blank, the app safely runs in an isolated development sandbox mode with realistic test profiles. |
-| `DAILY_FREE_LIMIT` | Optional | Free checks per IP per calendar day (default: `50`). |
-| `REDIS_URL` | Optional | Redis connection string (e.g. `rediss://default:token@...upstash.io`). If omitted, uses high-performance in-memory tracking. |
-| `VITE_SITE_NAME` | Optional | Site name branding (default: `FraudCheck BD`). |
+### Required for live checks
 
----
-
-## Local Development
-
-1. Install dependencies:
-```bash
-npm install
+```env
+BDCOURIER_API_URL=""
+BDCOURIER_API_KEY=""
 ```
 
-2. Start the development server (runs full-stack Express + Vite on port 3000):
+Use the exact endpoint and credential format supplied by the official courier.com.bd API documentation/account.
+
+### API request mapping
+
+These variables make the adapter compatible with the authentication/field names documented by the provider without exposing secrets to the browser:
+
+```env
+BDCOURIER_AUTH_HEADER="Authorization"
+BDCOURIER_AUTH_SCHEME="Bearer"
+BDCOURIER_API_KEY_LOCATION="header"
+BDCOURIER_API_KEY_FIELD="api_key"
+BDCOURIER_PHONE_FIELD="phone"
+BDCOURIER_TIMEOUT_MS="8000"
+```
+
+If the official documentation says the key belongs in the JSON body, use:
+
+```env
+BDCOURIER_API_KEY_LOCATION="body"
+```
+
+and set `BDCOURIER_API_KEY_FIELD` to the documented field name.
+
+### Daily quota
+
+```env
+DAILY_FREE_LIMIT="50"
+RATE_LIMIT_TIMEZONE_OFFSET_MINUTES="360"
+RATE_LIMIT_SALT="generate-a-long-random-secret"
+```
+
+The default reset timezone is Bangladesh Standard Time (UTC+6).
+
+### Recommended for Vercel
+
+For a consistent quota across multiple serverless instances:
+
+```env
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
+```
+
+Without persistent Redis credentials, local/in-memory counters are used. That is suitable for local development but is not a reliable multi-instance production quota.
+
+## Local development
+
 ```bash
+npm install
 npm run dev
 ```
 
-3. Open your browser at [http://localhost:3000](http://localhost:3000).
+Open:
 
----
+```text
+http://localhost:3000
+```
 
-## Vercel Deployment
+Useful endpoints:
 
-FraudCheck BD is natively architected for zero-configuration Vercel deployment:
+```text
+GET  /api/health
+GET  /api/rate-limit
+POST /api/check
+```
 
-1. Push your repository to **GitHub**.
-2. Go to [vercel.com](https://vercel.com) and click **"Add New Project"**.
-3. Import your GitHub repository.
-4. Under **Environment Variables**, add:
-   - `BDCOURIER_API_KEY` = *your_production_api_key*
-   - `BDCOURIER_API_URL` = *https://api.bdcourier.com/courier-check* (or provider endpoint)
-   - `DAILY_FREE_LIMIT` = `50`
-   - `REDIS_URL` = *optional Redis connection string for multi-region serverless caching*
-5. Click **Deploy**.
+Example request:
 
----
+```bash
+curl -X POST http://localhost:3000/api/check \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"017XXXXXXXX"}'
+```
 
-## Security & Privacy Compliance
+## Vercel deployment
 
-- **No Defamatory Labeling:** FraudCheck BD displays delivery risk scores and courier performance metrics strictly based on recorded courier actions. It never declares a customer as a confirmed "fraudster".
-- **Zero Plaintext Exfiltration:** Customer phone numbers are masked (`01*******89`) before leaving the server.
-- **Server-Side Proxy:** Credentials and external endpoints are never visible in browser network inspector tabs.
+1. Import `TeamRSBDigital/FraudCheck-BD` into Vercel.
+2. Add the production environment variables from `.env.example`.
+3. Keep `ENABLE_DEMO_MODE=false`.
+4. Add the exact live courier endpoint and API key from your authorized courier.com.bd account.
+5. Add Upstash Redis REST credentials if the public 50-check daily quota must be consistent across serverless instances.
+6. Deploy and verify:
+   - `/api/health`
+   - `/api/rate-limit`
+   - one known live test number through the checker
+   - error handling with an invalid number
+   - mobile layout
+   - print/PDF export
 
----
+## Security notes
+
+- API credentials are server-side only.
+- The frontend calls only same-origin `/api/*` routes.
+- Production no longer falls back to simulated customer history.
+- Phone numbers are normalized server-side and masked in returned reports.
+- Rate-limit storage keys use an HMAC of the client identifier rather than the raw IP.
+- API responses use `no-store` caching.
+- The application should be served over HTTPS.
+- Never commit `.env`, Vercel secrets, API keys, or Redis tokens.
+
+## Risk-score wording
+
+The application reports delivery-history risk signals; it does not claim that a person is a confirmed fraudster. Courier records can be incomplete or context-dependent, so merchants should use the report as one input in an order-review process.
 
 ## License
 
-MIT License. Designed for Bangladesh e-commerce merchants.
+MIT.

@@ -13,15 +13,24 @@ export default function handler(_req: Request, res: Response) {
     hasValue(process.env.UPSTASH_REDIS_REST_URL) &&
     hasValue(process.env.UPSTASH_REDIS_REST_TOKEN);
 
+  const dedicatedRateLimitSaltConfigured = hasValue(process.env.RATE_LIMIT_SALT);
+
+  const status = !courierConfigured
+    ? 'configuration_required'
+    : persistentRateLimitConfigured && dedicatedRateLimitSaltConfigured
+      ? 'ready'
+      : 'degraded';
+
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 
   res.status(courierConfigured ? 200 : 503).json({
-    status: courierConfigured ? 'ready' : 'configuration_required',
+    status,
     service: 'FraudCheck BD',
-    version: '2.0.0',
+    version: '2.1.0',
     mode: 'live',
     courierApi: courierConfigured ? 'configured' : 'missing_configuration',
     rateLimitStore: persistentRateLimitConfigured ? 'persistent' : 'memory',
+    rateLimitSalt: dedicatedRateLimitSaltConfigured ? 'configured' : 'fallback',
     timestamp: new Date().toISOString(),
   });
 }

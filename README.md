@@ -19,13 +19,11 @@ FraudCheck BD is designed to query an authorized courier-history API from the se
 - Exports and prints merchant reports.
 - Enforces a daily free-check quota.
 - Supports Upstash Redis REST counters for Vercel/serverless deployments.
-- Demo mode is disabled in application code; production checks never fall back to simulated customer history.
+- Live-only architecture: successful customer reports come only from the configured production courier API.
 
 ## Production trust rules
 
-FraudCheck BD does **not** silently invent courier history when the upstream service fails.
-
-If the production API is unavailable, misconfigured, rate-limited, or rejects the credentials, the UI shows an error. Simulated reports are disabled. If the live courier API is unavailable or misconfigured, the application returns an error instead of inventing customer history.
+FraudCheck BD contains **no demo, mock, sandbox, or offline customer-history fallback**. Every successful report must come from the configured live courier API. If the upstream service is unavailable, misconfigured, rate-limited, or rejects the credentials, the application returns a clear error instead of generating replacement data.
 
 ## Tech stack
 
@@ -172,7 +170,7 @@ curl -X POST http://localhost:3000/api/check \
 
 - API credentials are server-side only.
 - The frontend calls only same-origin `/api/*` routes.
-- Production no longer falls back to simulated customer history.
+- The production path has no simulated customer-history fallback.
 - Phone numbers are normalized server-side and masked in returned reports.
 - Rate-limit storage keys use an HMAC of the client identifier rather than the raw IP.
 - API responses use `no-store` caching.

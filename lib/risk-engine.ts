@@ -7,7 +7,7 @@
  * Terminology is strictly kept as "Delivery Risk", "Risk Indicators", "Order History".
  */
 
-import { AggregatedCourierData, RiskAssessment, RiskIndicator, RiskLevel } from '../src/types/index';
+import type { AggregatedCourierData, RiskAssessment, RiskIndicator, RiskLevel } from '../src/types/index.js';
 
 const DISCLAIMER_TEXT =
   'Risk assessment is based on available courier delivery history and should not be treated as a definitive fraud determination.';

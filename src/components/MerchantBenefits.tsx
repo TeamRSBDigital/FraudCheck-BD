@@ -24,7 +24,7 @@ export const MerchantBenefits: React.FC = () => {
             Reduce Return Delivery Losses
           </h4>
           <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-            Avoid paying 120-200 BDT in courier return fees by identifying serial returners and fake orders before dispatching.
+            Avoid paying 120-200 BDT in courier return fees by reviewing high-return delivery patterns before dispatching.
           </p>
         </div>
 
@@ -48,7 +48,7 @@ export const MerchantBenefits: React.FC = () => {
             Smart Advance Fee Advice
           </h4>
           <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-            Get automated guidelines on whether to dispatch on standard COD or request advance delivery charges via bKash/Nagad.
+            Use delivery-history signals to decide whether an order needs extra manual verification before dispatch.
           </p>
         </div>
       </div>

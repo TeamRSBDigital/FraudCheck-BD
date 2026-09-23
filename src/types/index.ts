@@ -59,6 +59,7 @@ export interface PhoneCheckResponse {
     resetTimestamp: number;
   };
   isMockData?: boolean;
+  source?: 'live' | 'demo';
   apiNotice?: string;
   error?: string;
   message?: string;

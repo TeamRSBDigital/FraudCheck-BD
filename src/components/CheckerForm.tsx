@@ -112,10 +112,10 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
           <div>
             <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-indigo-900/60 border border-indigo-700/60 text-[11px] font-medium text-indigo-200 mb-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Bangladesh Courier Fraud Intelligence</span>
+              <span>Bangladesh Delivery Risk Intelligence</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight font-display text-white">
-              Customer Courier Risk Check
+              Customer Delivery Risk Check
             </h2>
             <p className="mt-0.5 text-xs sm:text-sm text-slate-300 font-medium">
               পার্সেল পাঠানোর পূর্বে কাস্টমারের ডেলিভারি হিস্ট্রি ও রিস্ক লেভেল যাচাই করুন
@@ -123,7 +123,7 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
           </div>
           <div className="hidden md:flex items-center gap-2 text-xs text-indigo-200 bg-indigo-900/40 px-3 py-1.5 rounded-xl border border-indigo-700/50 self-start sm:self-center">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Multi-Courier Verification</span>
+            <span>Multi-Courier History Check</span>
           </div>
         </div>
       </div>
@@ -218,7 +218,7 @@ export const CheckerForm: React.FC<CheckerFormProps> = ({
               ) : isComplete && isLoading ? (
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                   <div className="h-3.5 w-3.5 rounded-full border-2 border-slate-900 border-t-transparent animate-spin" />
-                  <span>Checking SteadFast, Pathao, RedX, Paperfly records...</span>
+                  <span>Checking available courier delivery records...</span>
                 </div>
               ) : (
                 <p className="text-[11px] text-slate-500 flex items-center gap-1.5">

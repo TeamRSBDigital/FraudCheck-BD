@@ -1,10 +1,34 @@
 /**
- * BD Courier API Adapter
- * Secure server-side client to interact with the BD Courier API.
- * Handles endpoint normalization, automatic fallback, and robust error handling.
+ * BD Courier API adapter.
+ *
+ * Production rules:
+ * - credentials stay server-side
+ * - only the explicitly configured API endpoint is called
+ * - no silent mock/sandbox fallback in production
+ * - demo data is available only when ENABLE_DEMO_MODE=true
  */
 
 import { RawBdCourierResponse } from './types';
+
+export type CourierApiErrorCode =
+  | 'CONFIGURATION'
+  | 'AUTH'
+  | 'RATE_LIMIT'
+  | 'TIMEOUT'
+  | 'UPSTREAM'
+  | 'INVALID_RESPONSE';
+
+export class CourierApiError extends Error {
+  readonly code: CourierApiErrorCode;
+  readonly status?: number;
+
+  constructor(code: CourierApiErrorCode, message: string, status?: number) {
+    super(message);
+    this.name = 'CourierApiError';
+    this.code = code;
+    this.status = status;
+  }
+}
 
 export interface CourierHistoryResult {
   raw: RawBdCourierResponse | null;
@@ -12,385 +36,333 @@ export interface CourierHistoryResult {
   notice?: string;
 }
 
+function cleanEnv(value: string | undefined): string {
+  return value ? value.replace(/^["']|["']$/g, '').trim() : '';
+}
+
+function isEnabled(value: string | undefined): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(cleanEnv(value).toLowerCase());
+}
+
 export class BdCourierClient {
-  private readonly configuredUrl: string | undefined;
-  private readonly apiKey: string | undefined;
+  private readonly apiUrl: string;
+  private readonly apiKey: string;
+  private readonly authHeader: string;
+  private readonly authScheme: string;
+  private readonly phoneField: string;
+  private readonly apiKeyLocation: 'header' | 'body';
+  private readonly apiKeyField: string;
+  private readonly timeoutMs: number;
+  private readonly demoMode: boolean;
 
   constructor() {
-    this.configuredUrl = process.env.BDCOURIER_API_URL?.trim();
-    this.apiKey = process.env.BDCOURIER_API_KEY ? process.env.BDCOURIER_API_KEY.replace(/^["']|["']$/g, '').trim() : undefined;
+    this.apiUrl = cleanEnv(process.env.BDCOURIER_API_URL);
+    this.apiKey = cleanEnv(process.env.BDCOURIER_API_KEY);
+    this.authHeader = cleanEnv(process.env.BDCOURIER_AUTH_HEADER) || 'Authorization';
+    this.authScheme = cleanEnv(process.env.BDCOURIER_AUTH_SCHEME) || 'Bearer';
+    this.phoneField = cleanEnv(process.env.BDCOURIER_PHONE_FIELD) || 'phone';
+    this.apiKeyField = cleanEnv(process.env.BDCOURIER_API_KEY_FIELD) || 'api_key';
+    this.apiKeyLocation =
+      cleanEnv(process.env.BDCOURIER_API_KEY_LOCATION).toLowerCase() === 'body'
+        ? 'body'
+        : 'header';
+
+    const configuredTimeout = Number.parseInt(cleanEnv(process.env.BDCOURIER_TIMEOUT_MS), 10);
+    this.timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout >= 1000
+      ? Math.min(configuredTimeout, 15000)
+      : 8000;
+
+    this.demoMode = isEnabled(process.env.ENABLE_DEMO_MODE);
   }
 
-  /**
-   * Resolves possible candidate API endpoints in priority order.
-   * Handles situations where user sets only the domain (e.g. https://api.bdcourier.com)
-   * or full path (e.g. https://api.bdcourier.com/courier-check).
-   */
-  private getCandidateEndpoints(): string[] {
-    const endpoints: string[] = [];
+  private buildRequest(phone: string): { headers: Record<string, string>; body: string } {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'User-Agent': 'FraudCheck-BD/2.0',
+    };
 
-    if (this.configuredUrl) {
-      let trimmed = this.configuredUrl.replace(/\/+$/, '');
-      if (trimmed.includes('/courier-check') || trimmed.includes('/check-courier-info')) {
-        endpoints.push(trimmed);
-      } else if (trimmed.includes('api.bdcourier.com')) {
-        endpoints.push(`${trimmed}/courier-check`);
-      } else if (trimmed.includes('bdcourier.com')) {
-        endpoints.push(`${trimmed}/api/courier-check`);
-      } else {
-        endpoints.push(`${trimmed}/courier-check`);
-      }
+    const payload: Record<string, string> = {
+      [this.phoneField]: phone,
+    };
+
+    if (this.apiKeyLocation === 'body') {
+      payload[this.apiKeyField] = this.apiKey;
+    } else {
+      headers[this.authHeader] = this.authScheme
+        ? `${this.authScheme} ${this.apiKey}`
+        : this.apiKey;
     }
 
-    // Default primary and secondary endpoints
-    const defaults = [
-      'https://api.bdcourier.com/courier-check',
-      'https://bdcourier.com/api/courier-check',
-      'https://courier.com.bd/api/courier-check',
-    ];
-
-    for (const d of defaults) {
-      if (!endpoints.includes(d)) {
-        endpoints.push(d);
-      }
-    }
-
-    return endpoints;
-  }
-
-  /**
-   * Fetches courier delivery records for the given normalized phone number.
-   * Ensures zero credential leakage to client.
-   */
-  async getCourierHistory(phone: string): Promise<CourierHistoryResult> {
-    // If API Key is configured, make the live authenticated request
-    if (this.apiKey && this.apiKey !== 'demo' && !this.apiKey.startsWith('PLACEHOLDER')) {
-      const endpoints = this.getCandidateEndpoints();
-      let lastError: Error | null = null;
-
-      for (const endpoint of endpoints) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s fast timeout per endpoint
-
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': `Bearer ${this.apiKey}`,
-              'api-key': this.apiKey,
-              'X-API-Key': this.apiKey,
-            },
-            body: JSON.stringify({
-              phone: phone,
-              phone_number: phone,
-              api_key: this.apiKey,
-            }),
-            signal: controller.signal,
-          });
-
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            let responseMessage = '';
-            try {
-              const errBody = (await response.json()) as { message?: string; error?: string; status?: string };
-              if (errBody && typeof errBody === 'object') {
-                responseMessage = errBody.message || errBody.error || '';
-              }
-            } catch {
-              // Non-JSON response
-            }
-
-            console.warn(`[BDCourier] Endpoint ${endpoint} returned HTTP ${response.status}: ${responseMessage}`);
-
-            if (response.status === 404) {
-              // Valid lookup with no courier records found
-              return { raw: null, isMock: false };
-            }
-
-            if (response.status === 401 || response.status === 403) {
-              // BD Courier returns 403 when subscription plan is not active or token lacks subscription
-              const noticeText = responseMessage
-                ? `BD Courier Notice: ${responseMessage}`
-                : 'BD Courier API key has no active subscription or was not recognized. Showing simulated test profile.';
-
-              console.warn('[BDCourier API Subscription Notice]:', noticeText);
-              return {
-                raw: this.getSandboxProfile(phone),
-                isMock: true,
-                notice: noticeText,
-              };
-            }
-
-            if (response.status === 429) {
-              throw new Error('Upstream BD Courier rate limit exceeded. Please wait a moment before trying again.');
-            }
-
-            // 405 (Method Not Allowed) means wrong subpath on this candidate; try next endpoint
-            if (response.status === 405) {
-              continue;
-            }
-
-            throw new Error(`Courier provider service returned HTTP ${response.status}`);
-          }
-
-          const data = (await response.json()) as RawBdCourierResponse;
-
-          // Some API endpoints return { status: 'error', message: '...' } with 200 HTTP code
-          if (data && typeof data === 'object' && data.status === 'error' && data.message) {
-            const msg = String(data.message).toLowerCase();
-            if (msg.includes('token') || msg.includes('unauthorized') || msg.includes('api key') || msg.includes('subscription')) {
-              return {
-                raw: this.getSandboxProfile(phone),
-                isMock: true,
-                notice: `BD Courier Notice: ${data.message}`,
-              };
-            }
-            if (msg.includes('not found') || msg.includes('no data') || msg.includes('no record')) {
-              return { raw: null, isMock: false };
-            }
-          }
-
-          return { raw: data, isMock: false };
-        } catch (err: unknown) {
-          const isAbort = err instanceof Error && err.name === 'AbortError';
-          const errMsg = err instanceof Error ? err.message : String(err);
-          console.warn(`[BDCourier] Failed calling ${endpoint}:`, isAbort ? 'Request timed out after 12s' : errMsg);
-          lastError = err instanceof Error ? err : new Error(errMsg);
-        }
-      }
-
-      // If all live endpoints failed with network/timeout errors, gracefully fallback to sandbox
-      if (lastError) {
-        console.warn('[BDCourier] Live endpoints unreachable. Falling back to sandbox profile:', lastError.message);
-        return {
-          raw: this.getSandboxProfile(phone),
-          isMock: true,
-          notice: 'Live courier API unreachable. Showing simulated demonstration profile.',
-        };
-      }
-    }
-
-    // Development / Sandbox mode:
-    // Explicitly isolated for testing risk engines and UI states when no production API key is configured.
-    console.info(`[BDCourier Sandbox] Serving deterministic profile for ${phone.slice(0, 3)}***${phone.slice(-2)}`);
-    const mockData = this.getSandboxProfile(phone);
     return {
-      raw: mockData,
-      isMock: true,
+      headers,
+      body: JSON.stringify(payload),
     };
   }
 
+  async getCourierHistory(phone: string): Promise<CourierHistoryResult> {
+    if (this.demoMode) {
+      return {
+        raw: getSandboxProfile(phone),
+        isMock: true,
+        notice: 'Demo mode is enabled. This report uses simulated courier data and must not be used for a real customer decision.',
+      };
+    }
+
+    if (!this.apiUrl) {
+      throw new CourierApiError(
+        'CONFIGURATION',
+        'BD Courier API endpoint is not configured. Set BDCOURIER_API_URL from the official API documentation.'
+      );
+    }
+
+    if (!this.apiKey) {
+      throw new CourierApiError(
+        'CONFIGURATION',
+        'BD Courier API key is not configured. Add BDCOURIER_API_KEY to the server environment.'
+      );
+    }
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(this.apiUrl);
+    } catch {
+      throw new CourierApiError('CONFIGURATION', 'BDCOURIER_API_URL is not a valid URL.');
+    }
+
+    if (parsedUrl.protocol !== 'https:') {
+      throw new CourierApiError('CONFIGURATION', 'BD Courier API endpoint must use HTTPS.');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const request = this.buildRequest(phone);
+      const response = await fetch(parsedUrl.toString(), {
+        method: 'POST',
+        headers: request.headers,
+        body: request.body,
+        signal: controller.signal,
+        redirect: 'error',
+      });
+
+      if (response.status === 404) {
+        return { raw: null, isMock: false };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new CourierApiError(
+          'AUTH',
+          'BD Courier rejected the API credentials or the account does not have API access.',
+          response.status
+        );
+      }
+
+      if (response.status === 429) {
+        throw new CourierApiError(
+          'RATE_LIMIT',
+          'BD Courier API rate limit reached. Please try again shortly.',
+          response.status
+        );
+      }
+
+      if (!response.ok) {
+        throw new CourierApiError(
+          'UPSTREAM',
+          `BD Courier API returned HTTP ${response.status}.`,
+          response.status
+        );
+      }
+
+      let data: RawBdCourierResponse;
+      try {
+        data = (await response.json()) as RawBdCourierResponse;
+      } catch {
+        throw new CourierApiError(
+          'INVALID_RESPONSE',
+          'BD Courier API returned an invalid JSON response.'
+        );
+      }
+
+      if (!data || typeof data !== 'object') {
+        throw new CourierApiError(
+          'INVALID_RESPONSE',
+          'BD Courier API returned an empty or invalid response.'
+        );
+      }
+
+      const message = typeof data.message === 'string' ? data.message.trim() : '';
+      const messageLower = message.toLowerCase();
+      const statusValue = String(data.status ?? '').toLowerCase();
+      const reportsFailure =
+        data.success === false ||
+        ['error', 'failed', 'fail', 'unauthorized', 'forbidden'].includes(statusValue);
+
+      if (reportsFailure) {
+        if (
+          messageLower.includes('unauthorized') ||
+          messageLower.includes('forbidden') ||
+          messageLower.includes('api key') ||
+          messageLower.includes('token') ||
+          messageLower.includes('subscription')
+        ) {
+          throw new CourierApiError('AUTH', message || 'BD Courier API authorization failed.');
+        }
+
+        if (
+          messageLower.includes('not found') ||
+          messageLower.includes('no data') ||
+          messageLower.includes('no record')
+        ) {
+          return { raw: null, isMock: false };
+        }
+
+        throw new CourierApiError(
+          'UPSTREAM',
+          message || 'BD Courier API reported an unsuccessful request.'
+        );
+      }
+
+      return { raw: data, isMock: false };
+    } catch (error: unknown) {
+      if (error instanceof CourierApiError) {
+        throw error;
+      }
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new CourierApiError(
+          'TIMEOUT',
+          `BD Courier API did not respond within ${this.timeoutMs}ms.`
+        );
+      }
+
+      throw new CourierApiError(
+        'UPSTREAM',
+        'Could not connect to the BD Courier API.'
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   public getSandboxProfile(phone: string): RawBdCourierResponse | null {
+    if (!this.demoMode) {
+      throw new CourierApiError(
+        'CONFIGURATION',
+        'Sandbox profiles are disabled. Set ENABLE_DEMO_MODE=true only for development or demos.'
+      );
+    }
     return getSandboxProfile(phone);
   }
 }
 
 /**
- * Deterministic sandbox data generator based on phone number patterns.
- * Useful for testing all 4 primary UI states: Low Risk, Medium Risk, High Risk, No Data.
+ * Deterministic demo data. Never used unless ENABLE_DEMO_MODE=true.
  */
 export function getSandboxProfile(phone: string): RawBdCourierResponse | null {
-    // Profile 1: No Data (numbers ending in 00, 99, or containing all zeroes)
-    if (phone.endsWith('00') || phone.endsWith('99') || phone === '01700000000') {
-      return {
-        status: 'success',
-        phone,
-        total_parcel: 0,
-        success_parcel: 0,
-        cancelled_parcel: 0,
-        returned_parcel: 0,
-        success_ratio: 0,
-        data: {},
-      };
-    }
-
-    // Profile for 01811111111 or numbers ending in 11 (Moderate Risk: 46 orders, 28 success, 18 cancelled / 60.9%)
-    if (phone === '01811111111' || phone.endsWith('11')) {
-      return {
-        status: 'success',
-        phone,
-        total_parcel: 46,
-        success_parcel: 28,
-        cancelled_parcel: 18,
-        returned_parcel: 18,
-        success_ratio: 60.9,
-        data: {
-          pathao: {
-            name: 'Pathao',
-            total_parcel: 18,
-            success_parcel: 10,
-            returned_parcel: 8,
-            cancelled_parcel: 8,
-            success_ratio: 55.6,
-          },
-          steadfast: {
-            name: 'SteadFast',
-            total_parcel: 3,
-            success_parcel: 0,
-            returned_parcel: 3,
-            cancelled_parcel: 3,
-            success_ratio: 0.0,
-          },
-          courierfast: {
-            name: 'Courier Fast',
-            total_parcel: 0,
-            success_parcel: 0,
-            returned_parcel: 0,
-            cancelled_parcel: 0,
-            success_ratio: 0.0,
-          },
-          redx: {
-            name: 'RedX',
-            total_parcel: 16,
-            success_parcel: 10,
-            returned_parcel: 6,
-            cancelled_parcel: 6,
-            success_ratio: 62.5,
-          },
-          paperfly: {
-            name: 'Paperfly',
-            total_parcel: 9,
-            success_parcel: 8,
-            returned_parcel: 1,
-            cancelled_parcel: 1,
-            success_ratio: 88.9,
-          },
-          carrybee: {
-            name: 'CarryBee',
-            total_parcel: 0,
-            success_parcel: 0,
-            returned_parcel: 0,
-            cancelled_parcel: 0,
-            success_ratio: 0.0,
-          },
-        },
-      };
-    }
-
-    // Profile 2: High Risk (numbers ending in 88, 89, 77, 13)
-    if (phone.endsWith('88') || phone.endsWith('89') || phone.endsWith('77') || phone.endsWith('13')) {
-      return {
-        status: 'success',
-        phone,
-        total_parcel: 51,
-        success_parcel: 34,
-        cancelled_parcel: 5,
-        returned_parcel: 12,
-        success_ratio: 66.7,
-        data: {
-          pathao: {
-            name: 'Pathao',
-            total_parcel: 24,
-            success_parcel: 18,
-            returned_parcel: 4,
-            cancelled_parcel: 2,
-            success_ratio: 75.0,
-          },
-          steadfast: {
-            name: 'SteadFast',
-            total_parcel: 15,
-            success_parcel: 8,
-            returned_parcel: 5,
-            cancelled_parcel: 2,
-            success_ratio: 53.3,
-          },
-          redx: {
-            name: 'RedX',
-            total_parcel: 8,
-            success_parcel: 5,
-            returned_parcel: 2,
-            cancelled_parcel: 1,
-            success_ratio: 62.5,
-          },
-          paperfly: {
-            name: 'Paperfly',
-            total_parcel: 4,
-            success_parcel: 3,
-            returned_parcel: 1,
-            cancelled_parcel: 0,
-            success_ratio: 75.0,
-          },
-        },
-      };
-    }
-
-    // Profile 3: Medium Risk (numbers ending in 55, 44, 33, 42)
-    if (phone.endsWith('55') || phone.endsWith('44') || phone.endsWith('33') || phone.endsWith('42')) {
-      return {
-        status: 'success',
-        phone,
-        total_parcel: 14,
-        success_parcel: 10,
-        cancelled_parcel: 2,
-        returned_parcel: 2,
-        success_ratio: 71.4,
-        data: {
-          steadfast: {
-            name: 'SteadFast',
-            total_parcel: 8,
-            success_parcel: 6,
-            returned_parcel: 1,
-            cancelled_parcel: 1,
-            success_ratio: 75.0,
-          },
-          pathao: {
-            name: 'Pathao',
-            total_parcel: 6,
-            success_parcel: 4,
-            returned_parcel: 1,
-            cancelled_parcel: 1,
-            success_ratio: 66.7,
-          },
-        },
-      };
-    }
-
-    // Profile 4: Low Risk / Safe (default profile, high delivery success rate)
+  if (phone.endsWith('00') || phone.endsWith('99')) {
     return {
       status: 'success',
       phone,
-      total_parcel: 32,
-      success_parcel: 30,
-      cancelled_parcel: 1,
-      returned_parcel: 1,
-      success_ratio: 93.8,
+      total_parcel: 0,
+      success_parcel: 0,
+      cancelled_parcel: 0,
+      returned_parcel: 0,
+      success_ratio: 0,
+      data: {},
+    };
+  }
+
+  const highRisk = ['77', '88', '89', '13'].some((suffix) => phone.endsWith(suffix));
+
+  if (highRisk) {
+    return {
+      status: 'success',
+      phone,
+      total_parcel: 51,
+      success_parcel: 34,
+      cancelled_parcel: 5,
+      returned_parcel: 12,
+      success_ratio: 66.7,
       data: {
-        steadfast: {
-          name: 'SteadFast',
-          total_parcel: 14,
-          success_parcel: 13,
-          returned_parcel: 1,
-          cancelled_parcel: 0,
-          success_ratio: 92.9,
-        },
         pathao: {
           name: 'Pathao',
-          total_parcel: 12,
-          success_parcel: 12,
-          returned_parcel: 0,
-          cancelled_parcel: 0,
-          success_ratio: 100.0,
+          total_parcel: 24,
+          success_parcel: 18,
+          returned_parcel: 4,
+          cancelled_parcel: 2,
+          success_ratio: 75,
+        },
+        steadfast: {
+          name: 'SteadFast',
+          total_parcel: 15,
+          success_parcel: 8,
+          returned_parcel: 5,
+          cancelled_parcel: 2,
+          success_ratio: 53.3,
         },
         redx: {
           name: 'RedX',
+          total_parcel: 8,
+          success_parcel: 5,
+          returned_parcel: 2,
+          cancelled_parcel: 1,
+          success_ratio: 62.5,
+        },
+        paperfly: {
+          name: 'Paperfly',
           total_parcel: 4,
           success_parcel: 3,
-          returned_parcel: 0,
-          cancelled_parcel: 1,
-          success_ratio: 75.0,
-        },
-        carrybee: {
-          name: 'CarryBee',
-          total_parcel: 2,
-          success_parcel: 2,
-          returned_parcel: 0,
+          returned_parcel: 1,
           cancelled_parcel: 0,
-          success_ratio: 100.0,
+          success_ratio: 75,
         },
       },
     };
   }
 
+  return {
+    status: 'success',
+    phone,
+    total_parcel: 32,
+    success_parcel: 30,
+    cancelled_parcel: 1,
+    returned_parcel: 1,
+    success_ratio: 93.8,
+    data: {
+      steadfast: {
+        name: 'SteadFast',
+        total_parcel: 14,
+        success_parcel: 13,
+        returned_parcel: 1,
+        cancelled_parcel: 0,
+        success_ratio: 92.9,
+      },
+      pathao: {
+        name: 'Pathao',
+        total_parcel: 12,
+        success_parcel: 12,
+        returned_parcel: 0,
+        cancelled_parcel: 0,
+        success_ratio: 100,
+      },
+      redx: {
+        name: 'RedX',
+        total_parcel: 4,
+        success_parcel: 3,
+        returned_parcel: 0,
+        cancelled_parcel: 1,
+        success_ratio: 75,
+      },
+      carrybee: {
+        name: 'CarryBee',
+        total_parcel: 2,
+        success_parcel: 2,
+        returned_parcel: 0,
+        cancelled_parcel: 0,
+        success_ratio: 100,
+      },
+    },
+  };
+}

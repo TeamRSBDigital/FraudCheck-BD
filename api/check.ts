@@ -29,6 +29,34 @@ function setPrivateApiHeaders(res: Response) {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Vary', 'Origin');
+}
+
+function getHeaderValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] || '';
+  return value || '';
+}
+
+function isAllowedBrowserOrigin(req: Request): boolean {
+  const origin = getHeaderValue(req.headers.origin).trim();
+
+  // Non-browser/server-to-server requests often have no Origin header.
+  if (!origin) return true;
+
+  try {
+    const originUrl = new URL(origin);
+    const forwardedHost = getHeaderValue(req.headers['x-forwarded-host']).trim();
+    const host = forwardedHost || getHeaderValue(req.headers.host).trim();
+    const forwardedProto = getHeaderValue(req.headers['x-forwarded-proto']).trim();
+    const protocol = forwardedProto || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+
+    if (!host) return false;
+
+    const requestOrigin = new URL(`${protocol}://${host}`).origin;
+    return originUrl.origin === requestOrigin;
+  } catch {
+    return false;
+  }
 }
 
 export default async function handler(req: Request, res: Response) {
@@ -47,6 +75,13 @@ export default async function handler(req: Request, res: Response) {
     });
   }
 
+  if (!isAllowedBrowserOrigin(req)) {
+    return res.status(403).json({
+      success: false,
+      error: 'Cross-site requests are not allowed.',
+    });
+  }
+
   try {
     let body = req.body;
     if (typeof body === 'string') {
@@ -58,7 +93,7 @@ export default async function handler(req: Request, res: Response) {
     }
 
     const phone = body?.phone;
-    if (!phone || typeof phone !== 'string') {
+    if (!phone || typeof phone !== 'string' || phone.length > 32) {
       return res.status(400).json({
         success: false,
         error: 'Enter a valid Bangladeshi mobile number.',
@@ -74,23 +109,26 @@ export default async function handler(req: Request, res: Response) {
     }
 
     const clientIp = getClientIp(req);
-    const rateLimitCheck = await defaultRateLimiter.check(clientIp);
 
-    res.setHeader('X-RateLimit-Limit', String(rateLimitCheck.limit));
-    res.setHeader('X-RateLimit-Remaining', String(rateLimitCheck.remaining));
+    // Consume the quota atomically before the paid/upstream lookup so concurrent
+    // requests cannot race past the daily limit.
+    const consumed = await defaultRateLimiter.consume(clientIp);
+
+    res.setHeader('X-RateLimit-Limit', String(consumed.limit));
+    res.setHeader('X-RateLimit-Remaining', String(consumed.remaining));
     res.setHeader(
       'X-RateLimit-Reset',
-      String(Math.floor(rateLimitCheck.resetTime / 1000))
+      String(Math.floor(consumed.resetTime / 1000))
     );
 
-    if (!rateLimitCheck.allowed) {
+    if (!consumed.allowed) {
       return res.status(429).json({
         success: false,
         error: 'আজকের ফ্রি চেকের লিমিট শেষ হয়েছে। বাংলাদেশ সময় রাত ১২টার পর আবার চেষ্টা করুন।',
         rateLimit: {
-          limit: rateLimitCheck.limit,
+          limit: consumed.limit,
           remaining: 0,
-          resetTimestamp: rateLimitCheck.resetTime,
+          resetTimestamp: consumed.resetTime,
         },
       });
     }
@@ -98,9 +136,6 @@ export default async function handler(req: Request, res: Response) {
     const courierResult = await courierClient.getCourierHistory(normalizedPhone);
     const normalizedData = normalizeCourierData(courierResult.raw);
     const riskAssessment = calculateDeliveryRisk(normalizedData);
-
-    const consumed = await defaultRateLimiter.consume(clientIp);
-    res.setHeader('X-RateLimit-Remaining', String(consumed.remaining));
 
     return res.status(200).json({
       success: true,

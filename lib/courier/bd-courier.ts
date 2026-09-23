@@ -1,11 +1,8 @@
 /**
- * BD Courier API adapter.
+ * Production BD Courier API adapter.
  *
- * Production rules:
- * - credentials stay server-side
- * - only the explicitly configured API endpoint is called
- * - no silent mock/sandbox fallback in production
- * - demo data is available only when ENABLE_DEMO_MODE=true
+ * This module contains no demo, mock, sandbox, or offline fallback path.
+ * Every successful report must come from the configured live courier API.
  */
 
 import { RawBdCourierResponse } from './types';
@@ -32,8 +29,7 @@ export class CourierApiError extends Error {
 
 export interface CourierHistoryResult {
   raw: RawBdCourierResponse | null;
-  isMock: boolean;
-  notice?: string;
+  providerStatus: 'live';
 }
 
 function cleanEnv(value: string | undefined): string {
@@ -49,7 +45,6 @@ export class BdCourierClient {
   private readonly apiKeyLocation: 'header' | 'body';
   private readonly apiKeyField: string;
   private readonly timeoutMs: number;
-  private readonly demoMode: boolean;
 
   constructor() {
     this.apiUrl = cleanEnv(process.env.BDCOURIER_API_URL);
@@ -63,15 +58,60 @@ export class BdCourierClient {
         ? 'body'
         : 'header';
 
-    const configuredTimeout = Number.parseInt(cleanEnv(process.env.BDCOURIER_TIMEOUT_MS), 10);
-    this.timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout >= 1000
-      ? Math.min(configuredTimeout, 15000)
-      : 8000;
+    const configuredTimeout = Number.parseInt(
+      cleanEnv(process.env.BDCOURIER_TIMEOUT_MS),
+      10
+    );
 
-    this.demoMode = false;
+    this.timeoutMs =
+      Number.isFinite(configuredTimeout) && configuredTimeout >= 1000
+        ? Math.min(configuredTimeout, 15000)
+        : 8000;
   }
 
-  private buildRequest(phone: string): { headers: Record<string, string>; body: string } {
+  isConfigured(): boolean {
+    return Boolean(this.apiUrl && this.apiKey);
+  }
+
+  private getApiUrl(): URL {
+    if (!this.apiUrl) {
+      throw new CourierApiError(
+        'CONFIGURATION',
+        'BD Courier API endpoint is not configured.'
+      );
+    }
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(this.apiUrl);
+    } catch {
+      throw new CourierApiError(
+        'CONFIGURATION',
+        'BDCOURIER_API_URL is not a valid URL.'
+      );
+    }
+
+    if (parsedUrl.protocol !== 'https:') {
+      throw new CourierApiError(
+        'CONFIGURATION',
+        'BD Courier API endpoint must use HTTPS.'
+      );
+    }
+
+    return parsedUrl;
+  }
+
+  private buildRequest(phone: string): {
+    headers: Record<string, string>;
+    body: string;
+  } {
+    if (!this.apiKey) {
+      throw new CourierApiError(
+        'CONFIGURATION',
+        'BD Courier API key is not configured.'
+      );
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -97,60 +137,33 @@ export class BdCourierClient {
   }
 
   async getCourierHistory(phone: string): Promise<CourierHistoryResult> {
-    if (this.demoMode) {
-      return {
-        raw: getSandboxProfile(phone),
-        isMock: true,
-        notice: 'Demo mode is enabled. This report uses simulated courier data and must not be used for a real customer decision.',
-      };
-    }
-
-    if (!this.apiUrl) {
-      throw new CourierApiError(
-        'CONFIGURATION',
-        'BD Courier API endpoint is not configured. Set BDCOURIER_API_URL from the official API documentation.'
-      );
-    }
-
-    if (!this.apiKey) {
-      throw new CourierApiError(
-        'CONFIGURATION',
-        'BD Courier API key is not configured. Add BDCOURIER_API_KEY to the server environment.'
-      );
-    }
-
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(this.apiUrl);
-    } catch {
-      throw new CourierApiError('CONFIGURATION', 'BDCOURIER_API_URL is not a valid URL.');
-    }
-
-    if (parsedUrl.protocol !== 'https:') {
-      throw new CourierApiError('CONFIGURATION', 'BD Courier API endpoint must use HTTPS.');
-    }
+    const apiUrl = this.getApiUrl();
+    const request = this.buildRequest(phone);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const request = this.buildRequest(phone);
-      const response = await fetch(parsedUrl.toString(), {
+      const response = await fetch(apiUrl.toString(), {
         method: 'POST',
         headers: request.headers,
         body: request.body,
         signal: controller.signal,
         redirect: 'error',
+        cache: 'no-store',
       });
 
       if (response.status === 404) {
-        return { raw: null, isMock: false };
+        return {
+          raw: null,
+          providerStatus: 'live',
+        };
       }
 
       if (response.status === 401 || response.status === 403) {
         throw new CourierApiError(
           'AUTH',
-          'BD Courier rejected the API credentials or the account does not have API access.',
+          'BD Courier rejected the configured API credentials.',
           response.status
         );
       }
@@ -158,7 +171,7 @@ export class BdCourierClient {
       if (response.status === 429) {
         throw new CourierApiError(
           'RATE_LIMIT',
-          'BD Courier API rate limit reached. Please try again shortly.',
+          'BD Courier API rate limit reached.',
           response.status
         );
       }
@@ -177,7 +190,7 @@ export class BdCourierClient {
       } catch {
         throw new CourierApiError(
           'INVALID_RESPONSE',
-          'BD Courier API returned an invalid JSON response.'
+          'BD Courier API returned invalid JSON.'
         );
       }
 
@@ -188,12 +201,16 @@ export class BdCourierClient {
         );
       }
 
-      const message = typeof data.message === 'string' ? data.message.trim() : '';
+      const message =
+        typeof data.message === 'string' ? data.message.trim() : '';
       const messageLower = message.toLowerCase();
       const statusValue = String(data.status ?? '').toLowerCase();
+
       const reportsFailure =
         data.success === false ||
-        ['error', 'failed', 'fail', 'unauthorized', 'forbidden'].includes(statusValue);
+        ['error', 'failed', 'fail', 'unauthorized', 'forbidden'].includes(
+          statusValue
+        );
 
       if (reportsFailure) {
         if (
@@ -203,7 +220,10 @@ export class BdCourierClient {
           messageLower.includes('token') ||
           messageLower.includes('subscription')
         ) {
-          throw new CourierApiError('AUTH', message || 'BD Courier API authorization failed.');
+          throw new CourierApiError(
+            'AUTH',
+            message || 'BD Courier API authorization failed.'
+          );
         }
 
         if (
@@ -211,7 +231,10 @@ export class BdCourierClient {
           messageLower.includes('no data') ||
           messageLower.includes('no record')
         ) {
-          return { raw: null, isMock: false };
+          return {
+            raw: null,
+            providerStatus: 'live',
+          };
         }
 
         throw new CourierApiError(
@@ -220,7 +243,10 @@ export class BdCourierClient {
         );
       }
 
-      return { raw: data, isMock: false };
+      return {
+        raw: data,
+        providerStatus: 'live',
+      };
     } catch (error: unknown) {
       if (error instanceof CourierApiError) {
         throw error;
@@ -241,124 +267,4 @@ export class BdCourierClient {
       clearTimeout(timeoutId);
     }
   }
-
-  public getSandboxProfile(phone: string): RawBdCourierResponse | null {
-    if (!this.demoMode) {
-      throw new CourierApiError(
-        'CONFIGURATION',
-        'Sandbox profiles are disabled. Set ENABLE_DEMO_MODE=true only for development or demos.'
-      );
-    }
-    return getSandboxProfile(phone);
-  }
-}
-
-/**
- * Deterministic demo data. Never used unless ENABLE_DEMO_MODE=true.
- */
-export function getSandboxProfile(phone: string): RawBdCourierResponse | null {
-  if (phone.endsWith('00') || phone.endsWith('99')) {
-    return {
-      status: 'success',
-      phone,
-      total_parcel: 0,
-      success_parcel: 0,
-      cancelled_parcel: 0,
-      returned_parcel: 0,
-      success_ratio: 0,
-      data: {},
-    };
-  }
-
-  const highRisk = ['77', '88', '89', '13'].some((suffix) => phone.endsWith(suffix));
-
-  if (highRisk) {
-    return {
-      status: 'success',
-      phone,
-      total_parcel: 51,
-      success_parcel: 34,
-      cancelled_parcel: 5,
-      returned_parcel: 12,
-      success_ratio: 66.7,
-      data: {
-        pathao: {
-          name: 'Pathao',
-          total_parcel: 24,
-          success_parcel: 18,
-          returned_parcel: 4,
-          cancelled_parcel: 2,
-          success_ratio: 75,
-        },
-        steadfast: {
-          name: 'SteadFast',
-          total_parcel: 15,
-          success_parcel: 8,
-          returned_parcel: 5,
-          cancelled_parcel: 2,
-          success_ratio: 53.3,
-        },
-        redx: {
-          name: 'RedX',
-          total_parcel: 8,
-          success_parcel: 5,
-          returned_parcel: 2,
-          cancelled_parcel: 1,
-          success_ratio: 62.5,
-        },
-        paperfly: {
-          name: 'Paperfly',
-          total_parcel: 4,
-          success_parcel: 3,
-          returned_parcel: 1,
-          cancelled_parcel: 0,
-          success_ratio: 75,
-        },
-      },
-    };
-  }
-
-  return {
-    status: 'success',
-    phone,
-    total_parcel: 32,
-    success_parcel: 30,
-    cancelled_parcel: 1,
-    returned_parcel: 1,
-    success_ratio: 93.8,
-    data: {
-      steadfast: {
-        name: 'SteadFast',
-        total_parcel: 14,
-        success_parcel: 13,
-        returned_parcel: 1,
-        cancelled_parcel: 0,
-        success_ratio: 92.9,
-      },
-      pathao: {
-        name: 'Pathao',
-        total_parcel: 12,
-        success_parcel: 12,
-        returned_parcel: 0,
-        cancelled_parcel: 0,
-        success_ratio: 100,
-      },
-      redx: {
-        name: 'RedX',
-        total_parcel: 4,
-        success_parcel: 3,
-        returned_parcel: 0,
-        cancelled_parcel: 1,
-        success_ratio: 75,
-      },
-      carrybee: {
-        name: 'CarryBee',
-        total_parcel: 2,
-        success_parcel: 2,
-        returned_parcel: 0,
-        cancelled_parcel: 0,
-        success_ratio: 100,
-      },
-    },
-  };
 }

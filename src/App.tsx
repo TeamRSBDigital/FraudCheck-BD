@@ -14,7 +14,7 @@ import { MerchantBenefits } from './components/MerchantBenefits';
 import { LegalModal } from './components/LegalModal';
 import { Footer } from './components/Footer';
 import { PhoneCheckResponse } from './types/index';
-import { RotateCcw, Printer, Info, Download } from 'lucide-react';
+import { RotateCcw, Printer, Download } from 'lucide-react';
 import { exportReportToPdf } from './utils/pdfExport';
 
 export default function App() {
@@ -246,18 +246,7 @@ export default function App() {
         {/* Result Dashboard */}
         {!isLoading && report && (
           <section className="space-y-6 animate-in fade-in duration-300">
-            {/* Account / Subscription API Notice */}
-            {report.apiNotice && (
-              <div
-                className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 text-xs text-amber-950 shadow-xs"
-                id="api-notice-banner"
-              >
-                <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 stroke-[2]" />
-                <div className="leading-relaxed font-medium">
-                  <span className="font-bold text-amber-950">Notice:</span> {typeof report.apiNotice === 'string' ? report.apiNotice : String((report.apiNotice as Record<string, unknown>)?.message || '')}
-                </div>
-              </div>
-            )}
+
 
             {report.hasData && report.risk && report.data ? (
               <>

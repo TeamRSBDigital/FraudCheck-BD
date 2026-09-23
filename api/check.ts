@@ -114,9 +114,7 @@ export default async function handler(req: Request, res: Response) {
         remaining: consumed.remaining,
         resetTimestamp: consumed.resetTime,
       },
-      isMockData: courierResult.isMock,
-      source: courierResult.isMock ? 'demo' : 'live',
-      apiNotice: courierResult.notice,
+      source: courierResult.providerStatus,
     });
   } catch (error: unknown) {
     console.error(

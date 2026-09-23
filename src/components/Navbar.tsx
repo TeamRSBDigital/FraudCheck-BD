@@ -30,9 +30,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 font-display">
-                BD Courier{' '}
+                FraudCheck{' '}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600">
-                  Track
+                  BD
                 </span>
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/15 text-cyan-800 border border-cyan-300/80 backdrop-blur-md shadow-2xs uppercase tracking-wider">
@@ -41,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </div>
             <p className="text-[11px] font-medium text-slate-600 leading-tight">
-              Courier Delivery Intelligence for Bangladesh
+              Courier Risk Intelligence for Bangladesh
             </p>
           </div>
         </div>
@@ -54,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-cyan-200/90 bg-white/75 hover:bg-white/95 text-slate-700 text-xs hover:border-cyan-400 hover:text-cyan-800 transition-all cursor-pointer shadow-2xs backdrop-blur-md hover:shadow-xs hover:shadow-cyan-500/15"
           >
             <Search className="w-3.5 h-3.5 text-cyan-600" />
-            <span className="font-medium">Search Number...</span>
+            <span className="font-medium">Check Number...</span>
             <kbd className="ml-1 font-mono text-[10px] px-1.5 py-0.5 rounded bg-cyan-50/80 border border-cyan-200 text-cyan-800 font-semibold shadow-2xs">
               /
             </kbd>

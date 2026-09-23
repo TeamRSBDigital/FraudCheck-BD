@@ -19,19 +19,13 @@ FraudCheck BD is designed to query an authorized courier-history API from the se
 - Exports and prints merchant reports.
 - Enforces a daily free-check quota.
 - Supports Upstash Redis REST counters for Vercel/serverless deployments.
-- Includes an explicit demo mode for development; demo data is never used silently in production.
+- Demo mode is disabled in application code; production checks never fall back to simulated customer history.
 
 ## Production trust rules
 
 FraudCheck BD does **not** silently invent courier history when the upstream service fails.
 
-If the production API is unavailable, misconfigured, rate-limited, or rejects the credentials, the UI shows an error. Simulated reports are available only when:
-
-```env
-ENABLE_DEMO_MODE="true"
-```
-
-Do not enable demo mode when real merchant decisions are being made.
+If the production API is unavailable, misconfigured, rate-limited, or rejects the credentials, the UI shows an error. Simulated reports are disabled. If the live courier API is unavailable or misconfigured, the application returns an error instead of inventing customer history.
 
 ## Tech stack
 
@@ -164,10 +158,9 @@ curl -X POST http://localhost:3000/api/check \
 
 1. Import `TeamRSBDigital/FraudCheck-BD` into Vercel.
 2. Add the production environment variables from `.env.example`.
-3. Keep `ENABLE_DEMO_MODE=false`.
-4. Add the exact live courier endpoint and API key from your authorized courier.com.bd account.
-5. Add Upstash Redis REST credentials if the public 50-check daily quota must be consistent across serverless instances.
-6. Deploy and verify:
+3. Add the exact live courier endpoint and API key from your authorized courier.com.bd account.
+4. Add Upstash Redis REST credentials if the public 50-check daily quota must be consistent across serverless instances.
+5. Deploy and verify:
    - `/api/health`
    - `/api/rate-limit`
    - one known live test number through the checker

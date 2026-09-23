@@ -1,5 +1,18 @@
 import { PhoneCheckResponse } from '../types';
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    };
+    return entities[char] || char;
+  });
+}
+
 export async function exportReportToPdf(report: PhoneCheckResponse, phoneToDisplay: string): Promise<void> {
   // Dynamically import html2pdf in the browser
   const html2pdfModule: any = await import('html2pdf.js');
@@ -86,14 +99,14 @@ export async function exportReportToPdf(report: PhoneCheckResponse, phoneToDispl
             ${risk?.level || 'ASSESSED'}
           </span>
           <div style="font-size: 11px; font-weight: 700; color: ${riskColor}; margin-top: 4px;">
-            ${risk?.verdictTitle || 'Customer History Evaluated'}
+            ${escapeHtml(risk?.verdictTitle || 'Customer History Evaluated')}
           </div>
         </div>
       </div>
 
       <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed ${riskBorder};">
         <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #334155; font-weight: 500;">
-          <strong>Merchant Recommendation:</strong> ${risk?.summary || 'Review customer delivery history across partner couriers before shipping.'}
+          <strong>Merchant Recommendation:</strong> ${escapeHtml(risk?.summary || 'Review customer delivery history across partner couriers before shipping.')}
         </p>
       </div>
     </div>
@@ -142,7 +155,7 @@ export async function exportReportToPdf(report: PhoneCheckResponse, phoneToDispl
             .map(
               (c, idx) => `
             <tr style="border-bottom: 1px solid #f1f5f9; background-color: ${idx % 2 === 0 ? '#ffffff' : '#fcfcfd'};">
-              <td style="padding: 10px 18px; font-weight: 700; color: #0f172a;">${c.name}</td>
+              <td style="padding: 10px 18px; font-weight: 700; color: #0f172a;">${escapeHtml(c.name)}</td>
               <td style="padding: 10px 18px; text-align: center; font-family: monospace; font-weight: 600;">${c.totalOrders}</td>
               <td style="padding: 10px 18px; text-align: center; font-family: monospace; font-weight: 600; color: #059669;">${c.delivered}</td>
               <td style="padding: 10px 18px; text-align: center; font-family: monospace; font-weight: 600; color: #e11d48;">${c.cancelled}</td>

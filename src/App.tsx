@@ -14,12 +14,8 @@ import { MerchantBenefits } from './components/MerchantBenefits';
 import { LegalModal } from './components/LegalModal';
 import { Footer } from './components/Footer';
 import { PhoneCheckResponse } from './types/index';
-import { RotateCcw, Printer, Info, Download } from 'lucide-react';
+import { RotateCcw, Printer, Download } from 'lucide-react';
 import { exportReportToPdf } from './utils/pdfExport';
-import { normalizeBdPhone, maskBdPhone, isValidBdPhone } from '../lib/phone';
-import { normalizeCourierData } from '../lib/courier/normalizer';
-import { calculateDeliveryRisk } from '../lib/risk-engine';
-import { getSandboxProfile } from '../lib/courier/bd-courier';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -110,139 +106,67 @@ export default function App() {
   };
 
   const handleCheckCustomer = async (phone: string) => {
-    if (!phone) return;
+    if (!phone || isLoading) return;
+
     setIsLoading(true);
     setErrorMessage(null);
+    setReport(null);
     setLastQueriedPhone(phone);
 
-    const performFetch = async () => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 20000);
+
+    try {
       const response = await fetch('/api/check', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
         body: JSON.stringify({ phone }),
+        signal: controller.signal,
       });
 
       let data: PhoneCheckResponse | null = null;
       try {
         data = (await response.json()) as PhoneCheckResponse;
-      } catch (jsonErr) {
-        console.warn('Non-JSON response from server:', jsonErr);
+      } catch {
+        // The error message below intentionally avoids exposing raw upstream responses.
       }
 
-      return { response, data };
-    };
+      if (!response.ok || !data?.success) {
+        if (response.status === 429 && data?.rateLimit) {
+          setRemainingChecks(data.rateLimit.remaining);
+          setTotalLimit(data.rateLimit.limit);
+          setResetTimestamp(data.rateLimit.resetTimestamp);
+        }
 
-    try {
-      let result: { response: Response; data: PhoneCheckResponse | null };
-      try {
-        result = await performFetch();
-      } catch (firstErr) {
-        console.warn('Initial check failed, retrying after brief pause...', firstErr);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        result = await performFetch();
-      }
-
-      const { response, data } = result;
-
-      if (!response.ok || !data) {
-        // Handle 429 Rate Limit
-        if (response.status === 429) {
-          if (data?.rateLimit) {
-            setRemainingChecks(0);
-            setResetTimestamp(data.rateLimit.resetTimestamp);
-          }
-          const rateLimitMsg = typeof data?.error === 'string'
+        const message =
+          typeof data?.error === 'string'
             ? data.error
-            : typeof data?.message === 'string'
-              ? data.message
-              : 'আজকের ফ্রি চেকের লিমিট শেষ হয়ে গেছে। কাল আবার চেষ্টা করুন।';
-          setErrorMessage(rateLimitMsg);
-          return;
-        }
-
-        // Resilient Fallback: When hosted on Vercel without active backend or on temporary server 500 error,
-        // automatically fallback to the local courier evaluation profile so the user gets instant results!
-        try {
-          const normalized = normalizeBdPhone(phone);
-          if (isValidBdPhone(normalized)) {
-            const rawMock = getSandboxProfile(normalized);
-            const normalizedData = normalizeCourierData(rawMock);
-            const riskAssessment = calculateDeliveryRisk(normalizedData);
-            setReport({
-              success: true,
-              maskedPhone: maskBdPhone(normalized),
-              queryTimestamp: new Date().toISOString(),
-              hasData: normalizedData.totalOrders > 0,
-              data: normalizedData,
-              risk: riskAssessment,
-              rateLimit: {
-                limit: 50,
-                remaining: remainingChecks !== null ? Math.max(0, remainingChecks - 1) : 49,
-                resetTimestamp: Date.now() + 86400000,
-              },
-              isMockData: true,
-              apiNotice: 'সার্ভার সংযোগে সাময়িক বিলম্ব হওয়ায় অফলাইন ভেরিফিকেশন ডাটা প্রদর্শিত হচ্ছে।',
-            });
-            return;
-          }
-        } catch (fbErr) {
-          console.error('Fallback evaluation error:', fbErr);
-        }
-
-        const safeErrText = typeof data?.error === 'string'
-          ? data.error
-          : (data?.error && typeof data.error === 'object' && 'message' in (data.error as Record<string, unknown>))
-            ? String((data.error as { message?: unknown }).message)
             : typeof data?.message === 'string'
               ? data.message
               : 'সার্ভার থেকে তথ্য পাওয়া যায়নি। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।';
 
-        setErrorMessage(safeErrText);
+        setErrorMessage(message);
         return;
       }
 
-      // Successful check response
       setReport(data);
+
       if (data.rateLimit) {
         setRemainingChecks(data.rateLimit.remaining);
         setTotalLimit(data.rateLimit.limit);
         setResetTimestamp(data.rateLimit.resetTimestamp);
       }
-    } catch (networkErr) {
-      console.warn('Network unreachable, utilizing resilient fallback courier assessment:', networkErr);
-      // Seamless offline/resilient fallback so user is NEVER blocked by network/restart delays
-      try {
-        const normalized = normalizeBdPhone(phone);
-        if (isValidBdPhone(normalized)) {
-          const rawMock = getSandboxProfile(normalized);
-          const normalizedData = normalizeCourierData(rawMock);
-          const riskAssessment = calculateDeliveryRisk(normalizedData);
-          setReport({
-            success: true,
-            maskedPhone: maskBdPhone(normalized),
-            queryTimestamp: new Date().toISOString(),
-            hasData: normalizedData.totalOrders > 0,
-            data: normalizedData,
-            risk: riskAssessment,
-            rateLimit: {
-              limit: 50,
-              remaining: remainingChecks !== null ? Math.max(0, remainingChecks - 1) : 49,
-              resetTimestamp: Date.now() + 86400000,
-            },
-            isMockData: true,
-            apiNotice: 'সার্ভার সংযোগে সাময়িক বিলম্ব হওয়ায় অফলাইন ভেরিফিকেশন ডাটা প্রদর্শিত হচ্ছে।',
-          });
-          return;
-        }
-      } catch (fallbackErr) {
-        console.error('Fallback error:', fallbackErr);
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setErrorMessage('চেকটি সম্পন্ন হতে বেশি সময় লাগছে। কিছুক্ষণ পর আবার চেষ্টা করুন।');
+      } else {
+        setErrorMessage('নেটওয়ার্ক সংযোগে সাময়িক সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।');
       }
-
-      setErrorMessage('নেটওয়ার্ক সংযোগে সাময়িক সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।');
     } finally {
+      window.clearTimeout(timeoutId);
       setIsLoading(false);
     }
   };
@@ -322,18 +246,7 @@ export default function App() {
         {/* Result Dashboard */}
         {!isLoading && report && (
           <section className="space-y-6 animate-in fade-in duration-300">
-            {/* Account / Subscription API Notice */}
-            {report.apiNotice && (
-              <div
-                className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 text-xs text-amber-950 shadow-xs"
-                id="api-notice-banner"
-              >
-                <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 stroke-[2]" />
-                <div className="leading-relaxed font-medium">
-                  <span className="font-bold text-amber-950">Notice:</span> {typeof report.apiNotice === 'string' ? report.apiNotice : String((report.apiNotice as Record<string, unknown>)?.message || '')}
-                </div>
-              </div>
-            )}
+
 
             {report.hasData && report.risk && report.data ? (
               <>

@@ -19,14 +19,14 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLegal }) => {
             <div className="flex flex-col items-center sm:items-start">
               <div className="flex items-center gap-2">
                 <span className="text-lg font-extrabold text-slate-900 font-display tracking-tight">
-                  BD Courier <span className="text-blue-600">Track</span>
+                  FraudCheck <span className="text-blue-600">BD</span>
                 </span>
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                   Live
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Check courier order history & success rates across Bangladesh.
+                Customer delivery-history intelligence for Bangladesh merchants.
               </p>
             </div>
           </div>
@@ -41,7 +41,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLegal }) => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-semibold border border-sky-200/90 transition-all shadow-2xs hover:shadow-xs"
-                title="Official BD Courier API"
+                title="BD Courier data provider"
               >
                 <span>API Credit:</span>
                 <span className="font-bold underline decoration-sky-300">courier.com.bd</span>

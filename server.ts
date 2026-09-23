@@ -1,197 +1,51 @@
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { BdCourierClient } from './lib/courier/bd-courier.ts';
-import { normalizeCourierData } from './lib/courier/normalizer.ts';
-import { calculateDeliveryRisk } from './lib/risk-engine.ts';
-import { defaultRateLimiter } from './lib/rate-limiter.ts';
-import { isValidBdPhone, maskBdPhone, normalizeBdPhone } from './lib/phone.ts';
-
-const appDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+import checkHandler from './api/check.ts';
+import healthHandler from './api/health.ts';
+import rateLimitHandler from './api/rate-limit.ts';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number.parseInt(process.env.PORT || '3000', 10) || 3000;
 
-  // Basic security and parsing middleware
-  app.use(express.json({ limit: '100kb' }));
   app.disable('x-powered-by');
+  app.set('trust proxy', 1);
+  app.use(express.json({ limit: '32kb' }));
 
-  // CORS and iframe integration headers
-  app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(204);
-      return;
-    }
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), payment=()'
+    );
     next();
   });
 
-  // Trust proxy for proper client IP resolution in reverse-proxied containers (Cloud Run, Vercel)
-  app.set('trust proxy', 1);
-
-  const courierClient = new BdCourierClient();
-
-  // Helper to resolve client IP
-  const getClientIp = (req: Request): string => {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string') {
-      return forwarded.split(',')[0].trim();
-    }
-    return req.ip || req.socket.remoteAddress || '127.0.0.1';
-  };
-
-  // ==========================================
-  // API Routes (Defined BEFORE Vite Middleware)
-  // ==========================================
-
-  // Health check endpoint
-  app.get('/api/health', (_req: Request, res: Response) => {
-    res.status(200).json({
-      status: 'ok',
-      service: 'FraudCheck BD',
-      version: '1.0.0',
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  // Client rate limit status endpoint
-  app.get('/api/rate-limit', async (req: Request, res: Response) => {
+  app.all('/api/check', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const clientIp = getClientIp(req);
-      const status = await defaultRateLimiter.getStatus(clientIp);
-      res.setHeader('X-RateLimit-Limit', status.limit.toString());
-      res.setHeader('X-RateLimit-Remaining', status.remaining.toString());
-      res.setHeader('X-RateLimit-Reset', Math.floor(status.resetTime / 1000).toString());
-
-      res.json({
-        limit: status.limit,
-        remaining: status.remaining,
-        resetTimestamp: status.resetTime,
-      });
-    } catch {
-      res.status(500).json({ error: 'Unable to check rate limit' });
+      await checkHandler(req, res);
+    } catch (error) {
+      next(error);
     }
   });
 
-  // Main Courier Risk Check endpoint
-  app.post('/api/check', async (req: Request, res: Response) => {
+  app.all('/api/rate-limit', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { phone } = req.body as { phone?: unknown };
-      const clientIp = getClientIp(req);
-
-      // 1. Phone Input Sanitization & Validation
-      if (!phone || typeof phone !== 'string') {
-        res.status(400).json({
-          success: false,
-          error: 'Enter a valid Bangladeshi mobile number.',
-        });
-        return;
-      }
-
-      const normalizedPhone = normalizeBdPhone(phone);
-      if (!isValidBdPhone(normalizedPhone)) {
-        res.status(400).json({
-          success: false,
-          error: 'Enter a valid Bangladeshi mobile number (e.g. 017XXXXXXXX).',
-        });
-        return;
-      }
-
-      // 2. Server-side Rate Limiting Enforcement
-      const rateLimitCheck = await defaultRateLimiter.check(clientIp);
-      res.setHeader('X-RateLimit-Limit', rateLimitCheck.limit.toString());
-      res.setHeader('X-RateLimit-Remaining', rateLimitCheck.remaining.toString());
-      res.setHeader('X-RateLimit-Reset', Math.floor(rateLimitCheck.resetTime / 1000).toString());
-
-      if (!rateLimitCheck.allowed) {
-        res.status(429).json({
-          success: false,
-          error: 'Daily limit reached. Free checks reset daily. Please try again tomorrow.',
-          rateLimit: {
-            limit: rateLimitCheck.limit,
-            remaining: 0,
-            resetTimestamp: rateLimitCheck.resetTime,
-          },
-        });
-        return;
-      }
-
-      // 3. Consume 1 check token
-      const consumed = await defaultRateLimiter.consume(clientIp);
-      res.setHeader('X-RateLimit-Remaining', consumed.remaining.toString());
-
-      // 4. Secure Courier API Request
-      const courierResult = await courierClient.getCourierHistory(normalizedPhone);
-
-      // 5. Normalize response
-      const normalizedData = normalizeCourierData(courierResult.raw);
-
-      // 6. Calculate deterministic risk indicators
-      const riskAssessment = calculateDeliveryRisk(normalizedData);
-
-      // 7. Sanitize response - mask phone, never expose raw backend response or secrets
-      res.status(200).json({
-        success: true,
-        maskedPhone: maskBdPhone(normalizedPhone),
-        queryTimestamp: new Date().toISOString(),
-        hasData: normalizedData.totalOrders > 0,
-        data: normalizedData,
-        risk: riskAssessment,
-        rateLimit: {
-          limit: consumed.limit,
-          remaining: consumed.remaining,
-          resetTimestamp: consumed.resetTime,
-        },
-        isMockData: courierResult.isMock,
-        apiNotice: courierResult.notice,
-      });
-    } catch (err: unknown) {
-      console.warn('[API /check] Gracefully handling courier check failure:', err);
-      const errMsg = err instanceof Error ? err.message : 'Unknown error';
-
-      // Resilient fallback: Instead of breaking the UI, provide a simulated profile
-      try {
-        const phone = typeof req.body?.phone === 'string' ? req.body.phone : '01811111111';
-        const normalizedPhone = normalizeBdPhone(phone);
-        const fallbackProfile = courierClient.getSandboxProfile(normalizedPhone);
-        const normalizedData = normalizeCourierData(fallbackProfile);
-        const riskAssessment = calculateDeliveryRisk(normalizedData);
-
-        res.status(200).json({
-          success: true,
-          maskedPhone: maskBdPhone(normalizedPhone),
-          queryTimestamp: new Date().toISOString(),
-          hasData: normalizedData.totalOrders > 0,
-          data: normalizedData,
-          risk: riskAssessment,
-          rateLimit: {
-            limit: 50,
-            remaining: 49,
-            resetTimestamp: Date.now() + 86400000,
-          },
-          isMockData: true,
-          apiNotice: errMsg.includes('subscription')
-            ? 'BD Courier API: No active subscription found on your BD Courier account. Showing sandbox simulation.'
-            : 'Courier service temporarily in offline demonstration mode.',
-        });
-      } catch {
-        res.status(500).json({
-          success: false,
-          error: 'Unable to complete the check right now. Please try again in a moment.',
-        });
-      }
+      await rateLimitHandler(req, res);
+    } catch (error) {
+      next(error);
     }
   });
 
-  // Static assets serving for images directory
+  app.all('/api/health', (req: Request, res: Response) => {
+    healthHandler(req, res);
+  });
+
   app.use('/images', express.static(path.join(process.cwd(), 'images')));
 
-  // ==========================================
-  // Vite Middleware / Static Serving
-  // ==========================================
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -200,18 +54,49 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      etag: true,
+      maxAge: '1h',
+      setHeaders(res, filePath) {
+        if (filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    }));
+
     app.get('*', (_req: Request, res: Response) => {
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
+  app.use(
+    (
+      error: unknown,
+      _req: Request,
+      res: Response,
+      _next: NextFunction
+    ) => {
+      console.error(
+        '[FraudCheck server]',
+        error instanceof Error ? error.message : 'Unknown server error'
+      );
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          error: 'Internal server error.',
+        });
+      }
+    }
+  );
+
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`FraudCheck BD server running on http://0.0.0.0:${PORT}`);
+    console.log(`FraudCheck BD running on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start FraudCheck BD server:', err);
+startServer().catch((error) => {
+  console.error('Failed to start FraudCheck BD:', error);
   process.exit(1);
 });

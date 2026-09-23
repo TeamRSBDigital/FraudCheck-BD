@@ -9,7 +9,7 @@
  */
 
 import { createHmac } from 'crypto';
-import { RateLimitStatus } from '../src/types/index';
+import type { RateLimitStatus } from '../src/types/index.js';
 
 interface RateLimitStore {
   getCount(key: string): Promise<number>;

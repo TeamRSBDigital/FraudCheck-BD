@@ -40,10 +40,6 @@ function cleanEnv(value: string | undefined): string {
   return value ? value.replace(/^["']|["']$/g, '').trim() : '';
 }
 
-function isEnabled(value: string | undefined): boolean {
-  return ['1', 'true', 'yes', 'on'].includes(cleanEnv(value).toLowerCase());
-}
-
 export class BdCourierClient {
   private readonly apiUrl: string;
   private readonly apiKey: string;
@@ -72,7 +68,7 @@ export class BdCourierClient {
       ? Math.min(configuredTimeout, 15000)
       : 8000;
 
-    this.demoMode = isEnabled(process.env.ENABLE_DEMO_MODE);
+    this.demoMode = false;
   }
 
   private buildRequest(phone: string): { headers: Record<string, string>; body: string } {

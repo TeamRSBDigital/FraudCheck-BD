@@ -5,7 +5,7 @@
  * Every successful report must come from the configured live courier API.
  */
 
-import { RawBdCourierResponse } from './types';
+import type { RawBdCourierResponse } from './types.js';
 
 export type CourierApiErrorCode =
   | 'CONFIGURATION'

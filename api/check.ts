@@ -2,11 +2,11 @@ import type { Request, Response } from 'express';
 import {
   BdCourierClient,
   CourierApiError,
-} from '../lib/courier/bd-courier';
-import { normalizeCourierData } from '../lib/courier/normalizer';
-import { calculateDeliveryRisk } from '../lib/risk-engine';
-import { defaultRateLimiter } from '../lib/rate-limiter';
-import { isValidBdPhone, maskBdPhone, normalizeBdPhone } from '../lib/phone';
+} from '../lib/courier/bd-courier.js';
+import { normalizeCourierData } from '../lib/courier/normalizer.js';
+import { calculateDeliveryRisk } from '../lib/risk-engine.js';
+import { defaultRateLimiter } from '../lib/rate-limiter.js';
+import { isValidBdPhone, maskBdPhone, normalizeBdPhone } from '../lib/phone.js';
 
 const courierClient = new BdCourierClient();
 

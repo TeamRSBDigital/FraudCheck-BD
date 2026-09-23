@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { defaultRateLimiter } from '../lib/rate-limiter';
+import { defaultRateLimiter } from '../lib/rate-limiter.js';
 
 function getClientIp(req: Request): string {
   const vercelForwarded = req.headers['x-vercel-forwarded-for'];
